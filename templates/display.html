@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#111714">
+  <meta name="theme-color" content="#111322">
   <title>The Wheel · Main Display</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/game.css') }}">
   <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" defer></script>
@@ -13,10 +13,10 @@
   <header class="display-header"><span class="display-brand">THE <b>WHEEL</b></span><div class="display-tools"><button class="audio-toggle" id="audio-toggle" type="button" aria-label="Enable TV audio" title="Enable TV audio">♫ <span>Sound off</span></button><span class="display-status"><i></i> LIVE GAME</span></div></header>
   <main class="display-main">
     <section class="display-stage" id="display-stage">
-      <p class="display-overline" id="display-overline">THE BIRTHDAY PARTY GAME</p>
       <div class="player-reveal" id="player-reveal" hidden></div>
       <p class="display-category" id="display-category">Waiting for the host</p>
-      <h1 class="display-question" id="display-question">The room is yours.</h1>
+      <h1 class="display-question" id="display-question">Happy birthday!</h1>
+      <p class="display-subtext" id="display-subtext">Like the gameshow 'The Wheel', but this time, you're playing for your presents!</p>
       <section class="display-share" id="display-share" aria-live="polite">
         <p>GUEST LINK</p>
         <strong id="display-share-url">Starting Cloudflare link...</strong>

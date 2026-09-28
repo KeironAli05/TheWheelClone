@@ -130,8 +130,8 @@
     latestState = state;
     const question = state.current_question;
     const phase = state.phase;
-    byId('display-category').textContent = state.current_category || (phase === 'PLAYER_SELECT' ? 'NEXT UP' : 'THE BIRTHDAY PARTY GAME');
-    byId('display-question').textContent = question?.text || (phase === 'LOBBY' ? 'The room is yours.' : phase === 'GAME_WON' ? 'The birthday girl gets her presents!' : phase === 'PLAYER_SELECT' ? 'Who’s next?' : 'Get ready.');
+    byId('display-category').textContent = state.current_category || (phase === 'PLAYER_SELECT' ? 'NEXT UP' : '');
+    byId('display-question').textContent = question?.text || (phase === 'LOBBY' ? 'Happy birthday!' : phase === 'GAME_WON' ? 'The birthday girl gets her presents!' : phase === 'PLAYER_SELECT' ? 'Who’s next?' : 'Get ready.');
     byId('active-player-name').textContent = state.current_player_name || 'No player yet';
     byId('answer-count').textContent = `${state.expert_answer_count} / ${state.expert_answer_total} in`;
     const revealed = phase === 'ANSWER_REVEAL' || phase === 'GAME_WON';
