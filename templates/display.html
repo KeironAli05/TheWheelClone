@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111714">
+  <title>The Wheel · Main Display</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/game.css') }}">
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" defer></script>
+  <script src="{{ url_for('static', filename='js/game.js') }}" defer></script>
+</head>
+<body class="display-page" data-page="display">
+  <header class="display-header"><span class="display-brand">THE <b>WHEEL</b></span><div class="display-tools"><button class="audio-toggle" id="audio-toggle" type="button" aria-label="Enable TV audio" title="Enable TV audio">♫ <span>Sound off</span></button><span class="display-status"><i></i> LIVE GAME</span></div></header>
+  <main class="display-main">
+    <section class="display-stage" id="display-stage">
+      <p class="display-overline" id="display-overline">THE BIRTHDAY PARTY GAME</p>
+      <div class="player-reveal" id="player-reveal" hidden></div>
+      <p class="display-category" id="display-category">Waiting for the host</p>
+      <h1 class="display-question" id="display-question">The room is yours.</h1>
+      <section class="display-share" id="display-share" aria-live="polite">
+        <p>GUEST LINK</p>
+        <strong id="display-share-url">Starting Cloudflare link...</strong>
+        <span id="display-share-message">The address will appear here when it is ready.</span>
+      </section>
+      <div class="display-options" id="display-options"></div>
+      <p class="display-result" id="display-result"></p>
+    </section>
+    <aside class="display-rail">
+      <section class="progress-block"><div class="rail-heading"><h2>Categories</h2><span id="progress-count">0 / 0</span></div><div class="category-list" id="category-list"></div></section>
+      <section class="progress-block expert-progress"><div class="rail-heading"><h2>Experts</h2><span id="answer-count">0 / 0 in</span></div><div class="display-experts" id="display-experts"></div></section>
+      <section class="active-player"><span class="active-marker"></span><div><p>IN THE CHAIR</p><strong id="active-player-name">No player yet</strong></div></section>
+    </aside>
+  </main>
+  <audio id="game-audio" preload="none"></audio>
+</body>
+</html>

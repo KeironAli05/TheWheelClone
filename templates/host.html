@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111714">
+  <title>Host · The Wheel</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/game.css') }}">
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" defer></script>
+  <script src="{{ url_for('static', filename='js/game.js') }}" defer></script>
+</head>
+<body class="control-page" data-page="host">
+  <header class="phone-header">
+    <a class="mini-brand" href="/">THE <b>WHEEL</b></a>
+    <span class="connection-status" id="connection-status"><i></i> Connecting</span>
+  </header>
+  <main class="host-layout">
+    <section class="host-main">
+      <div class="section-kicker"><span class="live-dot"></span> HOST CONTROL</div>
+      <div class="phase-line"><h1 id="host-phase">Connecting to game</h1><span id="host-round" class="round-count"></span></div>
+      <p id="host-message" class="host-message">Getting the room ready…</p>
+      <div id="host-controls" class="host-controls" aria-live="polite"></div>
+      <p class="toast" id="host-toast" role="status"></p>
+    </section>
+    <aside class="host-sidebar">
+      <div class="sidebar-heading"><h2>In the room</h2><span id="room-count">0</span></div>
+      <section><h3>Players</h3><ul class="roster" id="player-roster"><li class="empty-row">No players yet</li></ul></section>
+      <section><h3>Experts</h3><ul class="roster" id="expert-roster"><li class="empty-row">Loading experts</li></ul></section>
+      <a class="display-link" href="/display" target="_blank" rel="noopener">Open TV display <span aria-hidden="true">↗</span></a>
+    </aside>
+  </main>
+</body>
+</html>

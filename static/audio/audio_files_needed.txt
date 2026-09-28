@@ -1,0 +1,27 @@
+THE WHEEL - OPTIONAL AUDIO FILES
+
+Save MP3 files in this folder using these exact filenames. Audio is optional; the game works without these files.
+
+player-select.mp3
+  Plays when the host selects the next player and the TV runs the name reveal.
+
+spin-start.mp3
+  Plays when the host presses the spin-jingle button before spinning the chair.
+
+spin-stop.mp3
+  Plays when the chair lands on an expert who is shut down and the turn ends without a question.
+
+question-reveal.mp3
+  Plays when the chair lands on an available expert and the question appears.
+
+correct.mp3
+  Plays when the host reveals a correct player answer.
+
+incorrect.mp3
+  Plays when the host reveals an incorrect player answer, including a wrong final answer.
+
+final-reveal.mp3
+  Plays when the Birthday final question begins.
+
+victory.mp3
+  Plays when the final answer wins the game.

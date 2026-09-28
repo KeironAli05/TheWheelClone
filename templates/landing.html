@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111714">
+  <title>Join The Wheel</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/game.css') }}">
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" defer></script>
+  <script src="{{ url_for('static', filename='js/game.js') }}" defer></script>
+</head>
+<body class="join-page" data-page="landing">
+  <main class="join-shell">
+    <header class="brand-lockup">
+      <span class="brand-mark" aria-hidden="true">W</span>
+      <div><p class="eyebrow">A birthday party game</p><h1>The Wheel</h1></div>
+    </header>
+    <section class="join-panel" aria-labelledby="join-title">
+      <div class="section-kicker"><span class="live-dot"></span> THE PARTY IS HERE</div>
+      <h2 id="join-title">Who's playing?</h2>
+      <form action="{{ url_for('join_game') }}" method="post" id="join-form">
+        <fieldset class="role-picker">
+          <legend class="visually-hidden">Choose your role</legend>
+          <label class="role-option {% if not lobby.host_available %}role-unavailable{% endif %}" id="host-role">
+            <input type="radio" name="role" value="host" {% if form.get('role') == 'host' %}checked{% endif %} {% if not lobby.host_available %}disabled{% endif %}>
+            <span class="role-icon" aria-hidden="true">H</span><span><strong>Host</strong><small>Run the game</small></span>
+          </label>
+          <label class="role-option" id="expert-role">
+            <input type="radio" name="role" value="expert" {% if form.get('role') == 'expert' %}checked{% endif %}>
+            <span class="role-icon" aria-hidden="true">E</span><span><strong>Expert</strong><small>Answer on your phone</small></span>
+          </label>
+          <label class="role-option" id="player-role">
+            <input type="radio" name="role" value="player" {% if form.get('role') == 'player' %}checked{% endif %}>
+            <span class="role-icon" aria-hidden="true">P</span><span><strong>Player</strong><small>Take the chair</small></span>
+          </label>
+        </fieldset>
+
+        <div class="join-fields" id="expert-fields" {% if form.get('role') != 'expert' %}hidden{% endif %}>
+          <label for="expert_id">Choose your name</label>
+          <select id="expert_id" name="expert_id">
+            <option value="">Select an available expert</option>
+            {% for expert in lobby.experts if expert.available %}
+              <option value="{{ expert.id }}" {% if form.get('expert_id') == expert.id %}selected{% endif %}>{{ expert.name }} · {{ expert.category }}</option>
+            {% endfor %}
+          </select>
+          <p class="field-note" id="expert-empty" {% if lobby.experts|selectattr('available')|list %}hidden{% endif %}>All expert seats are taken.</p>
+        </div>
+
+        <div class="join-fields" id="player-fields" {% if form.get('role') != 'player' %}hidden{% endif %}>
+          <label for="player-name">Your name</label>
+          <input id="player-name" name="name" type="text" maxlength="32" autocomplete="given-name" placeholder="What should we call you?" value="{{ form.get('name', '') }}">
+        </div>
+
+        {% if errors %}<div class="form-errors" role="alert">{% for error in errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+        <button class="button button-lime button-wide" type="submit">Let's go <span aria-hidden="true">↗</span></button>
+      </form>
+    </section>
+    <footer class="join-footer"><span id="join-count">Waiting for the host</span><span>ONE LINK. THAT'S IT.</span></footer>
+  </main>
+</body>
+</html>

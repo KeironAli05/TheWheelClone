@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111714">
+  <title>{{ identity.name }} · The Wheel</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/game.css') }}">
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" defer></script>
+  <script src="{{ url_for('static', filename='js/game.js') }}" defer></script>
+</head>
+<body class="control-page participant-page" data-page="participant" data-role="{{ identity.role }}" data-id="{{ identity.id }}" data-expert-id="{{ identity.get('expert_id', '') }}" data-name="{{ identity.name }}">
+  <header class="phone-header">
+    <a class="mini-brand" href="/">THE <b>WHEEL</b></a>
+    <span class="connection-status" id="connection-status"><i></i> Connecting</span>
+  </header>
+  <main class="participant-shell">
+    <div class="participant-identity">
+      <p class="eyebrow" id="participant-role">{{ 'CATEGORY EXPERT' if identity.role == 'expert' else 'PLAYER' }}</p>
+      <h1>{{ identity.name }}</h1>
+      <p class="participant-category" id="participant-category">{{ identity.get('category', 'In the player pool') }}</p>
+    </div>
+    <section class="participant-status" id="participant-content" aria-live="polite">
+      <span class="status-orb"></span><p>Waiting for the host</p>
+    </section>
+    <p class="toast" id="participant-toast" role="status"></p>
+  </main>
+</body>
+</html>
