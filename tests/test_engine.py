@@ -29,6 +29,16 @@ class GameEngineTests(unittest.TestCase):
         self.assertEqual(self.game.phase, GamePhase.LANDED)
         self.game.confirm_landing()
 
+    def test_category_specialist_cannot_be_shut_down(self) -> None:
+        self.game.choose_category("Football")
+
+        with self.assertRaisesRegex(GameError, "selected category cannot be shut down"):
+            self.game.choose_shutdown("football")
+
+        self.assertEqual(self.game.phase, GamePhase.SHUTDOWN_SELECT)
+        self.game.choose_shutdown("music")
+        self.assertEqual(self.game.phase, GamePhase.SPINNING)
+
     def test_correct_answer_clears_category_and_advances(self) -> None:
         self.start_question()
         self.game.submit_expert_answer("football", "B")

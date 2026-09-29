@@ -1,3 +1,5 @@
+import atexit
+import io
 import os
 import re
 import secrets
@@ -5,10 +7,15 @@ import shutil
 import subprocess
 import threading
 import uuid
+import warnings
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import cast
 
-from flask import Flask, redirect, render_template, request, session, url_for
+from flask import Flask, abort, redirect, render_template, request, send_from_directory, session, url_for
 from flask_socketio import SocketIO, emit, join_room
+from PIL import Image, ImageOps, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 
 from game.data import DataFileError, load_experts, load_questions
 from game.engine import GameEngine, GameError
@@ -17,6 +24,45 @@ from game.models import Player
 
 BASE_DIR = Path(__file__).resolve().parent
 CLOUDFLARE_URL_PATTERN = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com", re.IGNORECASE)
+MAX_IMAGE_BYTES = 15 * 1024 * 1024
+MAX_IMAGE_PIXELS = 50_000_000
+register_heif_opener()
+
+
+def _save_participant_image(upload, upload_directory: Path) -> str | None:
+    if not upload or not upload.filename:
+        return None
+
+    image_bytes = upload.stream.read(MAX_IMAGE_BYTES + 1)
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise ValueError("Photos must be 15 MB or smaller.")
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            image = Image.open(io.BytesIO(image_bytes))
+            if image.format not in {"JPEG", "PNG", "WEBP", "HEIF"}:
+                raise ValueError("Choose a JPG, PNG, WebP, or HEIC photo.")
+            if image.width * image.height > MAX_IMAGE_PIXELS:
+                raise ValueError("Photos must be 50 megapixels or smaller.")
+            image.verify()
+
+            image = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes)))
+            image.thumbnail((512, 512), Image.Resampling.LANCZOS)
+            if "A" in image.getbands():
+                rgba = image.convert("RGBA")
+                normalized = Image.new("RGB", rgba.size, "#f0f1ff")
+                normalized.paste(rgba, mask=rgba.getchannel("A"))
+            else:
+                normalized = image.convert("RGB")
+    except ValueError:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning, OSError, UnidentifiedImageError) as error:
+        raise ValueError("Choose a valid JPG, PNG, WebP, or HEIC photo.") from error
+
+    filename = f"{secrets.token_hex(16)}.jpg"
+    normalized.save(upload_directory / filename, format="JPEG", quality=85, optimize=True)
+    return filename
 
 
 def find_cloudflared() -> str | None:
@@ -138,12 +184,16 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
         SECRET_KEY=os.environ.get("THE_WHEEL_SECRET", secrets.token_hex(32)),
         TESTING=testing,
         SHARE_LINK={"status": "disabled", "url": None, "message": ""},
+        MAX_CONTENT_LENGTH=16 * 1024 * 1024,
     )
     content_dir = data_dir or BASE_DIR / "data"
     experts = load_experts(content_dir / "experts.csv")
     questions = load_questions(content_dir / "questions.csv", experts)
     game = GameEngine(experts, questions)
     socketio = SocketIO(app, async_mode="threading")
+    upload_storage = TemporaryDirectory(prefix="the-wheel-uploads-")
+    atexit.register(upload_storage.cleanup)
+    upload_directory = Path(upload_storage.name)
     lock = threading.RLock()
     identities: dict[str, dict[str, str]] = {}
     expert_claims: dict[str, str] = {}
@@ -152,10 +202,15 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
     app.extensions["wheel_game"] = game
     app.extensions["wheel_socketio"] = socketio
     app.extensions["wheel_identities"] = identities
+    app.extensions["wheel_upload_storage"] = upload_storage
+    app.extensions["wheel_upload_directory"] = upload_directory
 
     def current_identity() -> dict[str, str] | None:
         identity_id = session.get("identity_id")
         return identities.get(identity_id) if identity_id else None
+
+    def uploaded_photo():
+        return next((photo for photo in request.files.getlist("photo") if photo and photo.filename), None)
 
     def lobby_state() -> dict[str, object]:
         return {
@@ -175,10 +230,29 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
         state = game.snapshot()
         state["role"] = role
         state["participant_id"] = participant_id
-        state["experts"] = [
-            {**expert, "joined": expert["id"] in expert_claims}
-            for expert in state["experts"]
-        ]
+        expert_states = []
+        expert_snapshots = cast(list[dict[str, object]], state["experts"])
+        for expert in expert_snapshots:
+            expert_state = {**expert, "joined": expert["id"] in expert_claims}
+            if role == "display":
+                identity = identities.get(expert_claims.get(cast(str, expert["id"]), ""))
+                if identity and identity.get("avatar_filename"):
+                    expert_state["avatar_url"] = f"/participant-images/{identity['avatar_filename']}"
+            expert_states.append(expert_state)
+        state["experts"] = expert_states
+        if role == "display":
+            player_snapshots = cast(list[dict[str, object]], state["players"])
+            state["players"] = [
+                {
+                    **player,
+                    **(
+                        {"avatar_url": f"/participant-images/{identities[cast(str, player['id'])]['avatar_filename']}"}
+                        if identities.get(cast(str, player["id"]), {}).get("avatar_filename")
+                        else {}
+                    ),
+                }
+                for player in player_snapshots
+            ]
         if role == "player":
             state["current_question"] = None
             state["expert_answers"] = {}
@@ -214,7 +288,7 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
         errors: list[str] = []
         with lock:
             identity_id = uuid.uuid4().hex
-            identity: dict[str, str]
+            identity: dict[str, str] | None = None
             if role == "host":
                 if host_identity_id is not None:
                     errors.append("A host has already joined this game.")
@@ -229,13 +303,20 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
                 elif expert_id in expert_claims:
                     errors.append("That expert has already joined.")
                 else:
-                    identity = {
-                        "id": identity_id,
-                        "role": "expert",
-                        "name": expert.name,
-                        "expert_id": expert.id,
-                    }
-                    expert_claims[expert_id] = identity_id
+                    try:
+                        avatar_filename = _save_participant_image(uploaded_photo(), upload_directory)
+                    except ValueError as error:
+                        errors.append(str(error))
+                    else:
+                        identity = {
+                            "id": identity_id,
+                            "role": "expert",
+                            "name": expert.name,
+                            "expert_id": expert.id,
+                        }
+                        if avatar_filename:
+                            identity["avatar_filename"] = avatar_filename
+                        expert_claims[expert_id] = identity_id
             elif role == "player":
                 name = form["name"].strip()
                 if not name:
@@ -245,15 +326,26 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
                 elif any(player.name.casefold() == name.casefold() for player in game.players.values()):
                     errors.append("That player name is already in use.")
                 else:
-                    identity = {"id": identity_id, "role": "player", "name": name}
                     try:
-                        game.add_player(Player(identity_id, name))
-                    except GameError as error:
+                        avatar_filename = _save_participant_image(uploaded_photo(), upload_directory)
+                    except ValueError as error:
                         errors.append(str(error))
+                    else:
+                        identity = {"id": identity_id, "role": "player", "name": name}
+                        if avatar_filename:
+                            identity["avatar_filename"] = avatar_filename
+                        try:
+                            game.add_player(Player(identity_id, name))
+                        except GameError as error:
+                            errors.append(str(error))
+                            if avatar_filename:
+                                (upload_directory / avatar_filename).unlink(missing_ok=True)
             else:
                 errors.append("Choose Host, Expert, or Player.")
 
             if not errors:
+                if identity is None:
+                    raise RuntimeError("A successful join must create an identity.")
                 identities[identity_id] = identity
                 session["identity_id"] = identity_id
                 broadcast_lobby()
@@ -261,6 +353,14 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
                 return redirect(url_for("host" if role == "host" else "player"))
 
         return render_template("landing.html", lobby=lobby_state(), errors=errors, form=form), 400
+
+    @app.get("/participant-images/<filename>")
+    def participant_image(filename: str):
+        if not re.fullmatch(r"[0-9a-f]{32}\.jpg", filename):
+            abort(404)
+        response = send_from_directory(upload_directory, filename, mimetype="image/jpeg", max_age=0)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/host")
     def host():

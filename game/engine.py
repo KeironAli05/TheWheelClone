@@ -102,6 +102,8 @@ class GameEngine:
     def choose_shutdown(self, expert_id: str) -> None:
         self._require_phase(GamePhase.SHUTDOWN_SELECT)
         self._require_expert(expert_id)
+        if self.experts[expert_id].category == self.current_category:
+            raise GameError("The expert for the selected category cannot be shut down.")
         if expert_id in self.locked_expert_ids:
             raise GameError("That expert is already locked out for this spin.")
         self.turn_shutdown_expert_id = expert_id

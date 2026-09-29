@@ -89,7 +89,7 @@
     byId('host-message').textContent = messages[phase] || '';
 
     const experts = state.experts || [];
-    const activeExperts = experts.filter((expert) => !expert.locked);
+    const activeExperts = experts.filter((expert) => !expert.locked && expert.category !== state.current_category);
     const controls = byId('host-controls');
     if (phase === 'LOBBY') {
       controls.innerHTML = `<div class="control-block"><h2>${state.players.length} player${state.players.length === 1 ? '' : 's'} joined</h2><p class="control-note">${state.players.length ? 'Take your places.' : 'At least one player needs to join.'}</p><button class="button button-lime" type="button" data-action="start" ${state.players.length ? '' : 'disabled'}>Start game <span aria-hidden="true">→</span></button></div>`;
@@ -98,7 +98,7 @@
     } else if (phase === 'CATEGORY_SELECT') {
       controls.innerHTML = selectForm('Player’s pick', 'category', state.available_categories.map((name) => ({ value: name, label: name })), 'choose_category', 'Lock category', 'No categories remain.');
     } else if (phase === 'SHUTDOWN_SELECT') {
-      controls.innerHTML = selectForm('Choose one expert to shut down', 'expert_id', activeExperts.map((expert) => ({ value: expert.id, label: `${expert.name} · ${expert.category}` })), 'choose_shutdown', 'Continue to spin', 'All experts are already locked out.');
+      controls.innerHTML = selectForm('Choose one expert to shut down', 'expert_id', activeExperts.map((expert) => ({ value: expert.id, label: `${expert.name} · ${expert.category}` })), 'choose_shutdown', 'Continue to spin', 'No eligible experts to shut down.');
     } else if (phase === 'SPINNING') {
       controls.innerHTML = `<div class="control-block host-form"><h2>Chair spinning</h2><button class="button button-muted" type="button" data-action="spin">Play spin jingle <span aria-hidden="true">♫</span></button></div>${selectForm('Where did they land?', 'expert_id', experts.map((expert) => ({ value: expert.id, label: `${expert.name} · ${expert.category}${expert.locked ? ' · LOCKED' : ''}` })), 'resolve_landing', 'Confirm landing', 'No experts configured.')}`;
     } else if (phase === 'LANDED') {
@@ -170,6 +170,11 @@
     byId('display-category').textContent = state.current_category || (phase === 'PLAYER_SELECT' ? 'NEXT UP' : '');
     byId('display-question').textContent = question?.text || (phase === 'LOBBY' ? 'Happy birthday!' : phase === 'GAME_WON' ? 'The birthday girl gets her presents!' : phase === 'PLAYER_SELECT' ? 'Who’s next?' : phase === 'LANDED' ? `Landed on ${state.current_expert_name}` : 'Get ready.');
     byId('active-player-name').textContent = state.current_player_name || 'No player yet';
+    const activePlayer = state.players.find((player) => player.id === state.current_player_id);
+    const activePlayerPhoto = byId('active-player-photo');
+    activePlayerPhoto.hidden = !activePlayer?.avatar_url;
+    activePlayerPhoto.src = activePlayer?.avatar_url || '';
+    activePlayerPhoto.alt = activePlayer?.avatar_url ? `${activePlayer.name}'s photo` : '';
     byId('display-subtext').hidden = Boolean(question);
     byId('answer-count').textContent = `${state.expert_answer_count} / ${state.expert_answer_total} in`;
     const revealed = phase === 'ANSWER_REVEAL' || phase === 'GAME_WON';
@@ -187,7 +192,15 @@
     byId('display-result').textContent = revealed ? resultLabel : '';
     byId('category-list').innerHTML = state.categories.map((category) => `<div class="category-item ${category.cleared ? 'cleared' : ''} ${category.name === state.current_category ? 'current' : ''}"><span>${escapeHtml(category.name)}</span><i></i></div>`).join('');
     byId('progress-count').textContent = `${state.categories.filter((category) => category.cleared).length} / ${state.categories.length}`;
-    byId('display-experts').innerHTML = state.experts.map((expert) => `<div class="expert-item ${expert.locked ? 'locked' : ''}"><span>${escapeHtml(expert.name)}</span><span class="expert-answer">${revealed ? escapeHtml(state.expert_answers[expert.id] || '—') : expert.answered ? 'IN' : ''}</span></div>`).join('');
+    byId('player-count').textContent = String(state.players.length);
+    byId('display-players').innerHTML = state.players.length ? state.players.map((player) => {
+      const isActive = player.id === state.current_player_id;
+      const portrait = player.avatar_url
+        ? `<img class="player-photo" src="${escapeHtml(player.avatar_url)}" alt="">`
+        : `<span class="player-photo-fallback" aria-hidden="true">${escapeHtml(player.name.charAt(0).toUpperCase())}</span>`;
+      return `<li class="player-item ${isActive ? 'active' : ''}"><span class="player-identity">${portrait}<span>${escapeHtml(player.name)}</span></span>${isActive ? '<span class="roster-status">IN CHAIR</span>' : ''}</li>`;
+    }).join('') : '<li class="empty-roster">No players yet</li>';
+    byId('display-experts').innerHTML = state.experts.map((expert) => `<li class="expert-item ${expert.locked ? 'locked' : ''} ${expert.selected ? 'selected' : ''} ${expert.category === state.current_category ? 'specialist' : ''}"><span class="expert-identity">${expert.avatar_url ? `<img class="expert-photo" src="${escapeHtml(expert.avatar_url)}" alt="">` : ''}<span>${escapeHtml(expert.name)}</span></span><span class="expert-answer">${revealed ? escapeHtml(state.expert_answers[expert.id] || '—') : expert.answered ? 'IN' : ''}</span></li>`).join('');
     renderShareLink(phase);
     if (phase === 'CATEGORY_SELECT' && previousPhase === 'PLAYER_SELECT') animatePlayerSelection(state);
     else if (phase !== 'CATEGORY_SELECT') hidePlayerReveal();
@@ -237,17 +250,20 @@
     if (!reveal) return;
     window.clearTimeout(revealTimer);
     reveal.hidden = false;
-    const names = state.players.map((player) => player.name);
-    const winner = state.current_player_name;
+    const players = state.players;
+    const winner = players.find((player) => player.id === state.current_player_id);
+    const showPlayer = (player, isWinner = false) => {
+      reveal.innerHTML = `${player?.avatar_url ? `<img src="${escapeHtml(player.avatar_url)}" alt="">` : ''}<span>${isWinner ? `YOU’RE UP, ${escapeHtml(player.name.toUpperCase())}` : escapeHtml(player?.name || state.current_player_name)}</span>`;
+    };
     let count = 0;
     const cycle = () => {
-      reveal.textContent = count > 10 ? winner : names[Math.floor(Math.random() * names.length)] || winner;
+      showPlayer(count > 10 ? winner : players[Math.floor(Math.random() * players.length)] || winner, count > 10);
       reveal.classList.remove('animate');
       void reveal.offsetWidth;
       reveal.classList.add('animate');
       count += 1;
       if (count > 13) {
-        revealTimer = window.setTimeout(() => { reveal.textContent = `YOU’RE UP, ${winner.toUpperCase()}`; }, 200);
+        revealTimer = window.setTimeout(() => showPlayer(winner, true), 200);
       } else {
         revealTimer = window.setTimeout(cycle, 95 + count * 31);
       }

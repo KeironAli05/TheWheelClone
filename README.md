@@ -39,6 +39,8 @@ winget install --id Cloudflare.cloudflared --exact --accept-source-agreements --
 
 The browser loads the Socket.IO client and display fonts from CDNs, so the laptop and guest phones need internet access. Game/session state lives in memory and resets when the server restarts.
 
+Players and experts can optionally add a photo when joining. JPG, PNG, WebP, and HEIC images up to 15 MB are accepted; uploads are normalized to small JPEG portraits (maximum 512 pixels) and kept in temporary storage until the server stops. Photos appear on the TV during player selection and beside the active player and selected expert. Anyone who can view the TV can see those photos.
+
 ## Party Data
 
 Edit the CSV files before starting the server:

@@ -1,8 +1,12 @@
+from io import BytesIO
 import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+from PIL import Image
+from werkzeug.datastructures import MultiDict
 
 from app import create_app, extract_cloudflare_url, find_cloudflared, start_cloudflare_tunnel
 
@@ -89,6 +93,104 @@ class WebAppTests(unittest.TestCase):
         self.assertEqual(first.status_code, 302)
         self.assertEqual(second.status_code, 400)
         self.assertIn(b"already in use", second.data)
+
+    def test_participant_photos_are_normalized_and_only_sent_to_display(self) -> None:
+        display_socket = self.socketio.test_client(self.app)
+        display_socket.emit("display_join")
+        display_socket.get_received()
+
+        player_client = self.app.test_client()
+        player_photo = BytesIO()
+        Image.new("RGB", (900, 600), "red").save(player_photo, format="PNG")
+        player_photo.seek(0)
+        self.assertEqual(
+            player_client.post(
+                "/join",
+                data=MultiDict([
+                    ("role", "player"),
+                    ("name", "Jamie"),
+                    ("photo", (BytesIO(), "", "application/octet-stream")),
+                    ("photo", (player_photo, "portrait.png", "image/png")),
+                ]),
+                content_type="multipart/form-data",
+            ).status_code,
+            302,
+        )
+
+        expert_id = next(iter(self.app.extensions["wheel_game"].experts))
+        expert_client = self.app.test_client()
+        expert_photo = BytesIO()
+        Image.new("RGB", (300, 700), "blue").save(expert_photo, format="HEIF")
+        expert_photo.seek(0)
+        self.assertEqual(
+            expert_client.post(
+                "/join",
+            data={"role": "expert", "expert_id": expert_id, "photo": (expert_photo, "portrait.heic", "image/heic")},
+                content_type="multipart/form-data",
+            ).status_code,
+            302,
+        )
+
+        display_states = [event["args"][0] for event in display_socket.get_received() if event["name"] == "state"]
+        display_state = display_states[-1]
+        player_photo_url = display_state["players"][0]["avatar_url"]
+        expert_photo_url = next(expert["avatar_url"] for expert in display_state["experts"] if expert["id"] == expert_id)
+        response = player_client.get(player_photo_url)
+        self.assertEqual(response.status_code, 200)
+        normalized_image = Image.open(BytesIO(response.data))
+        self.assertEqual(normalized_image.format, "JPEG")
+        self.assertLessEqual(max(normalized_image.size), 512)
+        response.close()
+        self.assertTrue(expert_photo_url.startswith("/participant-images/"))
+
+        host_client = self.app.test_client()
+        host_client.post("/join", data={"role": "host"})
+        host_socket = self.socketio.test_client(self.app, flask_test_client=host_client)
+        host_state = next(event["args"][0] for event in host_socket.get_received() if event["name"] == "state")
+        self.assertNotIn("avatar_url", host_state["players"][0])
+        self.assertNotIn("avatar_url", next(expert for expert in host_state["experts"] if expert["id"] == expert_id))
+
+        player_socket = self.socketio.test_client(self.app, flask_test_client=player_client)
+        player_state = next(event["args"][0] for event in player_socket.get_received() if event["name"] == "state")
+        self.assertNotIn("avatar_url", player_state["players"][0])
+
+        game = self.app.extensions["wheel_game"]
+        shutdown_id = next(candidate for candidate in game.experts if candidate != expert_id)
+        for payload in (
+            {"action": "start"},
+            {"action": "select_player"},
+            {"action": "choose_category", "category": game.categories[0]},
+            {"action": "choose_shutdown", "expert_id": shutdown_id},
+            {"action": "resolve_landing", "expert_id": expert_id},
+        ):
+            self.assertTrue(host_socket.emit("host_command", payload, callback=True)["ok"])
+
+        display_state = [event["args"][0] for event in display_socket.get_received() if event["name"] == "state"][-1]
+        selected_expert = next(expert for expert in display_state["experts"] if expert["id"] == expert_id)
+        self.assertTrue(selected_expert["selected"])
+        self.assertEqual(selected_expert["avatar_url"], expert_photo_url)
+
+    def test_invalid_and_oversized_photos_are_rejected(self) -> None:
+        invalid = self.client.post(
+            "/join",
+            data={"role": "player", "name": "Jamie", "photo": (BytesIO(b"not an image"), "portrait.png", "image/png")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn(b"valid JPG, PNG, WebP, or HEIC", invalid.data)
+        self.assertEqual(self.app.extensions["wheel_game"].players, {})
+        invalid.close()
+
+        with patch("app.MAX_IMAGE_BYTES", 10):
+            oversized = self.client.post(
+                "/join",
+                data={"role": "player", "name": "Jamie", "photo": (BytesIO(b"x" * 11), "portrait.jpg", "image/jpeg")},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(oversized.status_code, 400)
+        self.assertIn(b"15 MB or smaller", oversized.data)
+        self.assertEqual(self.app.extensions["wheel_game"].players, {})
+        oversized.close()
 
     def test_non_host_socket_cannot_control_game(self) -> None:
         socket_client = self.socketio.test_client(self.app, flask_test_client=self.client)

@@ -18,7 +18,7 @@
     <section class="join-panel" aria-labelledby="join-title">
       <div class="section-kicker"><span class="live-dot"></span> THE PARTY IS HERE</div>
       <h2 id="join-title">Who's playing?</h2>
-      <form action="{{ url_for('join_game') }}" method="post" id="join-form">
+      <form action="{{ url_for('join_game') }}" method="post" enctype="multipart/form-data" id="join-form">
         <fieldset class="role-picker">
           <legend class="visually-hidden">Choose your role</legend>
           <label class="role-option {% if not lobby.host_available %}role-unavailable{% endif %}" id="host-role">
@@ -43,12 +43,18 @@
               <option value="{{ expert.id }}" {% if form.get('expert_id') == expert.id %}selected{% endif %}>{{ expert.name }} · {{ expert.category }}</option>
             {% endfor %}
           </select>
+          <label for="expert-photo">Your photo <span class="optional-label">OPTIONAL</span></label>
+          <input id="expert-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif">
+          <p class="field-note">JPG, PNG, WebP, or HEIC · up to 15 MB</p>
           <p class="field-note" id="expert-empty" {% if lobby.experts|selectattr('available')|list %}hidden{% endif %}>All expert seats are taken.</p>
         </div>
 
         <div class="join-fields" id="player-fields" {% if form.get('role') != 'player' %}hidden{% endif %}>
           <label for="player-name">Your name</label>
           <input id="player-name" name="name" type="text" maxlength="32" autocomplete="given-name" placeholder="What should we call you?" value="{{ form.get('name', '') }}">
+          <label for="player-photo">Your photo <span class="optional-label">OPTIONAL</span></label>
+          <input id="player-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif">
+          <p class="field-note">JPG, PNG, WebP, or HEIC · up to 15 MB</p>
         </div>
 
         {% if errors %}<div class="form-errors" role="alert">{% for error in errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
