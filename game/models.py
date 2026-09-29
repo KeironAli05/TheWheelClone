@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 
 
@@ -8,6 +8,7 @@ class GamePhase(Enum):
     CATEGORY_SELECT = auto()
     SHUTDOWN_SELECT = auto()
     SPINNING = auto()
+    LANDED = auto()
     QUESTION = auto()
     ANSWER_REVEAL = auto()
     FINAL_QUESTION = auto()
@@ -36,6 +37,7 @@ class Player:
     name: str
     questions_answered: int = 0
     correct_answers: int = 0
+    used_powerups: set[str] = field(default_factory=set)
 
     @property
     def incorrect_answers(self) -> int:

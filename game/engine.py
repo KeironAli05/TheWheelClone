@@ -4,6 +4,14 @@ from collections import defaultdict
 from game.models import Expert, GamePhase, Player, Question
 
 
+POWERUPS = {
+    "ask_players": "Ask the Players",
+    "fifty_fifty": "50:50",
+    "peek": "Peek at an Expert",
+    "respin": "Re-spin",
+}
+
+
 class GameError(ValueError):
     """Raised when an action is invalid for the current game phase."""
 
@@ -51,6 +59,10 @@ class GameEngine:
         self.player_answer: str | None = None
         self.last_result: dict[str, object] | None = None
         self._pending_final_question = False
+        self.fifty_fifty_removed: list[str] = []
+        self.peek_expert_id: str | None = None
+        self.audience_status: str | None = None
+        self.audience_votes: dict[str, str] = {}
 
     def add_player(self, player: Player) -> None:
         if player.id in self.players:
@@ -96,21 +108,75 @@ class GameEngine:
         self.phase = GamePhase.SPINNING
 
     def resolve_landing(self, expert_id: str) -> bool:
+        """Returns False when the chair landed on a shut-down expert and the turn ended."""
         self._require_phase(GamePhase.SPINNING)
         self._require_expert(expert_id)
-        locked_for_spin = set(self.locked_expert_ids)
-        self.locked_expert_ids.clear()
-        if expert_id in locked_for_spin or expert_id == self.turn_shutdown_expert_id:
+        if expert_id in self.locked_expert_ids or expert_id == self.turn_shutdown_expert_id:
+            self.locked_expert_ids.clear()
             self.last_result = {"type": "shutdown_landing", "expert_id": expert_id}
             self._continue_player()
             return False
 
         self.current_expert_id = expert_id
-        self.current_question = self._draw_question(self.current_category or "")
-        self.expert_answers.clear()
-        self.player_answer = None
-        self.phase = GamePhase.QUESTION
+        if "respin" in self._current_player().used_powerups:
+            self._show_question()
+        else:
+            self.phase = GamePhase.LANDED
         return True
+
+    def confirm_landing(self) -> None:
+        self._require_phase(GamePhase.LANDED)
+        self._show_question()
+
+    def use_respin(self) -> None:
+        self._require_phase(GamePhase.LANDED)
+        self._use_powerup("respin")
+        self.current_expert_id = None
+        self.phase = GamePhase.SPINNING
+
+    def use_fifty_fifty(self) -> list[str]:
+        self._require_phase(GamePhase.QUESTION)
+        question = self.current_question
+        assert question is not None
+        self._use_powerup("fifty_fifty")
+        wrong = [letter for letter in "ABCD" if letter != question.correct]
+        self.fifty_fifty_removed = sorted(self._rng.sample(wrong, 2))
+        return self.fifty_fifty_removed
+
+    def use_peek(self, expert_id: str) -> None:
+        self._require_phase(GamePhase.QUESTION)
+        self._require_expert(expert_id)
+        self._use_powerup("peek")
+        self.peek_expert_id = expert_id
+
+    def start_audience_vote(self) -> None:
+        self._require_phase(GamePhase.QUESTION)
+        if not self._audience_voter_ids():
+            raise GameError("There are no other players to ask.")
+        self._use_powerup("ask_players")
+        self.audience_status = "open"
+        self.audience_votes.clear()
+
+    def submit_audience_vote(self, player_id: str, answer: str) -> None:
+        self._require_phase(GamePhase.QUESTION)
+        if self.audience_status != "open":
+            raise GameError("There is no vote open.")
+        if player_id not in self.players:
+            raise GameError("Only joined players can vote.")
+        if player_id == self.current_player_id:
+            raise GameError("The player in the chair cannot vote.")
+        normalized = answer.upper()
+        if normalized not in {"A", "B", "C", "D"}:
+            raise GameError("Answers must be A, B, C, or D.")
+        if player_id in self.audience_votes:
+            raise GameError("Your vote is already locked.")
+        self.audience_votes[player_id] = normalized
+
+    def close_audience_vote(self) -> None:
+        self._require_phase(GamePhase.QUESTION)
+        if self.audience_status != "open":
+            raise GameError("There is no vote open.")
+        self.audience_status = "closed"
 
     def submit_expert_answer(self, expert_id: str, answer: str) -> None:
         self._require_phase(GamePhase.QUESTION)
@@ -128,6 +194,8 @@ class GameEngine:
         if normalized not in {"A", "B", "C", "D"}:
             raise GameError("Answers must be A, B, C, or D.")
         self.player_answer = normalized
+        if self.audience_status == "open":
+            self.audience_status = "closed"
         self.phase = GamePhase.ANSWER_REVEAL
         question = self.current_question
         assert question is not None
@@ -156,6 +224,7 @@ class GameEngine:
             self.expert_answers.clear()
             self.player_answer = None
             self._pending_final_question = False
+            self._clear_powerup_effects()
             self.phase = GamePhase.FINAL_QUESTION
             return
         if self.last_result and self.last_result.get("type") == "correct":
@@ -197,18 +266,21 @@ class GameEngine:
         self.player_answer = None
         self.last_result = None
         self._pending_final_question = False
+        self._clear_powerup_effects()
         self.questions_by_category = defaultdict(list)
         for question in self._all_questions:
             self.questions_by_category[question.category].append(question)
         for player in self.players.values():
             player.questions_answered = 0
             player.correct_answers = 0
+            player.used_powerups.clear()
         for stats in self.expert_stats.values():
             stats["questions_answered"] = 0
             stats["correct_answers"] = 0
 
     def snapshot(self, reveal_expert_answers: bool = False) -> dict[str, object]:
         question = self.current_question
+        current_player = self.players.get(self.current_player_id) if self.current_player_id else None
         return {
             "phase": self.phase.name,
             "players": [
@@ -280,7 +352,74 @@ class GameEngine:
             if reveal_expert_answers or self.phase in {GamePhase.ANSWER_REVEAL, GamePhase.GAME_WON}
             else None,
             "last_result": self.last_result,
+            "powerups": [
+                {
+                    "id": powerup_id,
+                    "name": name,
+                    "used": bool(current_player and powerup_id in current_player.used_powerups),
+                    "available": self._powerup_available(powerup_id, current_player),
+                }
+                for powerup_id, name in POWERUPS.items()
+            ],
+            "fifty_fifty_removed": list(self.fifty_fifty_removed),
+            "peek": (
+                {
+                    "expert_id": self.peek_expert_id,
+                    "expert_name": self.experts[self.peek_expert_id].name,
+                    "answer": self.expert_answers.get(self.peek_expert_id),
+                }
+                if self.peek_expert_id
+                else None
+            ),
+            "audience": (
+                {
+                    "status": self.audience_status,
+                    "vote_count": len(self.audience_votes),
+                    "voter_total": len(self._audience_voter_ids()),
+                    "counts": (
+                        {letter: list(self.audience_votes.values()).count(letter) for letter in "ABCD"}
+                        if self.audience_status == "closed"
+                        else None
+                    ),
+                }
+                if self.audience_status
+                else None
+            ),
         }
+
+    def _show_question(self) -> None:
+        self.locked_expert_ids.clear()
+        self.current_question = self._draw_question(self.current_category or "")
+        self.expert_answers.clear()
+        self.player_answer = None
+        self._clear_powerup_effects()
+        self.phase = GamePhase.QUESTION
+
+    def _use_powerup(self, powerup_id: str) -> None:
+        player = self._current_player()
+        if powerup_id in player.used_powerups:
+            raise GameError(f"{player.name} has already used {POWERUPS[powerup_id]}.")
+        player.used_powerups.add(powerup_id)
+
+    def _powerup_available(self, powerup_id: str, player: Player | None) -> bool:
+        if player is None or powerup_id in player.used_powerups:
+            return False
+        if powerup_id == "respin":
+            return self.phase is GamePhase.LANDED
+        if self.phase is not GamePhase.QUESTION:
+            return False
+        if powerup_id == "ask_players":
+            return self.audience_status is None and bool(self._audience_voter_ids())
+        return True
+
+    def _audience_voter_ids(self) -> list[str]:
+        return [player_id for player_id in self.players if player_id != self.current_player_id]
+
+    def _clear_powerup_effects(self) -> None:
+        self.fifty_fifty_removed = []
+        self.peek_expert_id = None
+        self.audience_status = None
+        self.audience_votes.clear()
 
     def _draw_question(self, category: str) -> Question:
         pool = self.questions_by_category[category]
@@ -319,6 +458,7 @@ class GameEngine:
         self.expert_answers.clear()
         self.player_answer = None
         self._pending_final_question = False
+        self._clear_powerup_effects()
 
     def _current_player(self) -> Player:
         if self.current_player_id is None:

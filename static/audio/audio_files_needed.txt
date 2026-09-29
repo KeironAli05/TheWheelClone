@@ -9,10 +9,10 @@ spin-start.mp3
   Plays when the host presses the spin-jingle button before spinning the chair.
 
 spin-stop.mp3
-  Plays when the chair lands on an expert who is shut down and the turn ends without a question.
+  Plays when the chair lands: either on a shut-down expert (turn ends), or on an available expert while the player can still Re-spin.
 
 question-reveal.mp3
-  Plays when the chair lands on an available expert and the question appears.
+  Plays when the question appears.
 
 correct.mp3
   Plays when the host reveals a correct player answer.
@@ -25,3 +25,6 @@ final-reveal.mp3
 
 victory.mp3
   Plays when the final answer wins the game.
+
+powerup.mp3
+  Plays when the host confirms a power-up (Ask the Players, 50:50, Peek at an Expert, Re-spin).

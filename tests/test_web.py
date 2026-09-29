@@ -114,6 +114,7 @@ class WebAppTests(unittest.TestCase):
             {"action": "choose_category", "category": "Football"},
             {"action": "choose_shutdown", "expert_id": "sarah"},
             {"action": "resolve_landing", "expert_id": expert_id},
+            {"action": "confirm_landing"},
         ):
             self.assertTrue(host_socket.emit("host_command", payload, callback=True)["ok"])
 
@@ -130,6 +131,57 @@ class WebAppTests(unittest.TestCase):
 
         host_socket.disconnect()
         expert_socket.disconnect()
+
+    def test_host_confirms_powerups_and_players_vote(self) -> None:
+        game = self.app.extensions["wheel_game"]
+        host_client = self.app.test_client()
+        host_client.post("/join", data={"role": "host"})
+        chair_client = self.app.test_client()
+        chair_client.post("/join", data={"role": "player", "name": "Jamie"})
+        voter_client = self.app.test_client()
+        voter_client.post("/join", data={"role": "player", "name": "Taylor"})
+        chair_id = next(player.id for player in game.players.values() if player.name == "Jamie")
+        voter_id = next(player.id for player in game.players.values() if player.name == "Taylor")
+        expert_ids = list(game.experts)
+        host_socket = self.socketio.test_client(self.app, flask_test_client=host_client)
+        voter_socket = self.socketio.test_client(self.app, flask_test_client=voter_client)
+        send = lambda payload: host_socket.emit("host_command", payload, callback=True)
+
+        self.assertTrue(send({"action": "start"})["ok"])
+        game.select_player(chair_id)
+        for payload in (
+            {"action": "choose_category", "category": game.categories[0]},
+            {"action": "choose_shutdown", "expert_id": expert_ids[1]},
+            {"action": "resolve_landing", "expert_id": expert_ids[0]},
+            {"action": "use_powerup", "powerup": "respin"},
+            {"action": "resolve_landing", "expert_id": expert_ids[0]},
+        ):
+            self.assertTrue(send(payload)["ok"], payload)
+        self.assertEqual(game.phase.name, "QUESTION")
+        self.assertFalse(send({"action": "use_powerup", "powerup": "respin"})["ok"])
+
+        self.assertTrue(send({"action": "use_powerup", "powerup": "fifty_fifty"})["ok"])
+        self.assertTrue(send({"action": "use_powerup", "powerup": "peek", "expert_id": expert_ids[0]})["ok"])
+        self.assertTrue(send({"action": "use_powerup", "powerup": "ask_players"})["ok"])
+
+        voter_socket.get_received()
+        chair_socket = self.socketio.test_client(self.app, flask_test_client=chair_client)
+        self.assertFalse(chair_socket.emit("submit_vote", {"answer": "A"}, callback=True)["ok"])
+        self.assertFalse(host_socket.emit("submit_vote", {"answer": "A"}, callback=True)["ok"])
+        self.assertTrue(voter_socket.emit("submit_vote", {"answer": "C"}, callback=True)["ok"])
+
+        voter_state = [event for event in voter_socket.get_received() if event["name"] == "state"][-1]["args"][0]
+        self.assertTrue(voter_state["audience_voted"])
+        self.assertIsNone(voter_state["peek"])
+        self.assertIsNone(voter_state["current_question"])
+
+        self.assertTrue(send({"action": "close_vote"})["ok"])
+        self.assertEqual(game.snapshot()["audience"]["counts"]["C"], 1)
+        self.assertEqual(game.players[voter_id].used_powerups, set())
+        self.assertEqual(game.players[chair_id].used_powerups, {"respin", "fifty_fifty", "peek", "ask_players"})
+
+        for client in (host_socket, voter_socket, chair_socket):
+            client.disconnect()
 
 
 if __name__ == "__main__":

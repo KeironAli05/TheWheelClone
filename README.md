@@ -1,4 +1,8 @@
+# !THIS IS A VIBECODED PROJECT!
+I opted to vibecode this Game as it's going to be used at a birthday party for max an hour so I didn't think it would be worth all the in depth dev work for me to create it completely by myself
+
 # The Wheel
+
 
 A local, real-time birthday party game inspired by the supplied rules. The laptop runs the game server; open `/display` on the TV, then share the root URL (`/`) with guests. The server owns the game state and the host controls it from a phone.
 

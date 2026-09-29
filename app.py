@@ -183,6 +183,8 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
             state["current_question"] = None
             state["expert_answers"] = {}
             state["player_answer"] = None
+            state["peek"] = None
+            state["audience_voted"] = participant_id in game.audience_votes
         return state
 
     def broadcast_lobby() -> None:
@@ -325,8 +327,26 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
                         raise GameError("The spin is not ready yet.")
                     cue = "spin"
                 elif action == "resolve_landing":
-                    has_question = game.resolve_landing(str(payload.get("expert_id", "")))
-                    cue = "question" if has_question else "spin_stop"
+                    game.resolve_landing(str(payload.get("expert_id", "")))
+                    cue = "question" if game.phase.name == "QUESTION" else "spin_stop"
+                elif action == "confirm_landing":
+                    game.confirm_landing()
+                    cue = "question"
+                elif action == "use_powerup":
+                    powerup = str(payload.get("powerup", ""))
+                    if powerup == "respin":
+                        game.use_respin()
+                    elif powerup == "fifty_fifty":
+                        game.use_fifty_fifty()
+                    elif powerup == "peek":
+                        game.use_peek(str(payload.get("expert_id", "")))
+                    elif powerup == "ask_players":
+                        game.start_audience_vote()
+                    else:
+                        raise GameError("Unknown power-up.")
+                    cue = "powerup"
+                elif action == "close_vote":
+                    game.close_audience_vote()
                 elif action == "reveal_answer":
                     result = game.reveal_answer(str(payload.get("answer", "")))
                     cue = "correct" if result["type"] == "correct" else "incorrect"
@@ -354,6 +374,19 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
         try:
             with lock:
                 game.submit_expert_answer(identity["expert_id"], str(payload.get("answer", "")))
+            broadcast_state()
+            return {"ok": True}
+        except GameError as error:
+            return {"ok": False, "error": str(error)}
+
+    @socketio.on("submit_vote")
+    def on_submit_vote(payload: dict[str, object]):
+        identity = current_identity()
+        if not identity or identity["role"] != "player":
+            return {"ok": False, "error": "Only joined players can vote."}
+        try:
+            with lock:
+                game.submit_audience_vote(identity["id"], str(payload.get("answer", "")))
             broadcast_state()
             return {"ok": True}
         except GameError as error:
