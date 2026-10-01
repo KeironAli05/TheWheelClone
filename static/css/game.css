@@ -87,6 +87,13 @@ button { color: inherit; }
 .answer-choice b { display: grid; width: 27px; height: 27px; flex: 0 0 auto; place-items: center; color: var(--ink); background: var(--lime); font: 700 .95rem var(--display); }
 .answer-choice span { font-size: .85rem; }
 .control-note { color: var(--muted); font-size: .78rem; }
+.final-tier-options { display: grid; gap: 8px; }
+.final-tier-option { display: grid; gap: 4px; padding: 13px; border: 1px solid var(--line); color: var(--paper); background: var(--panel-raised); cursor: pointer; text-align: left; }
+.final-tier-option:hover:not(:disabled) { border-color: var(--lime); }
+.final-tier-option:disabled { opacity: .42; cursor: not-allowed; }
+.final-tier-option strong { font: 600 1.1rem var(--display); }
+.final-tier-option span { font-size: .84rem; }
+.final-tier-option small { color: var(--muted); font-size: .72rem; }
 .host-sidebar { align-self: start; padding: 18px; border: 1px solid var(--line); background: rgba(25,33,29,.7); }
 .sidebar-heading, .rail-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .sidebar-heading { padding-bottom: 12px; border-bottom: 1px solid var(--line); }

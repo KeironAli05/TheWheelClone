@@ -14,7 +14,9 @@ class GameEngineTests(unittest.TestCase):
         questions = [
             Question("f1", "Football", "Football question?", ("A", "B", "C", "D"), "B"),
             Question("m1", "Music", "Music question?", ("A", "B", "C", "D"), "C"),
-            Question("birthday", "Birthday", "Birthday question?", ("A", "B", "C", "D"), "A"),
+            Question("birthday1", "Birthday", "Birthday question one?", ("A", "B", "C", "D"), "A"),
+            Question("birthday2", "Birthday", "Birthday question two?", ("A", "B", "C", "D"), "B"),
+            Question("birthday3", "Birthday", "Birthday question three?", ("A", "B", "C", "D"), "C"),
         ]
         self.game = GameEngine(experts, questions, random.Random(1))
         self.game.add_player(Player("player-1", "Jamie"))
@@ -126,8 +128,12 @@ class GameEngineTests(unittest.TestCase):
 
         self.assertEqual(stats_by_id["football"]["accuracy"], 1.0)
         self.assertEqual(stats_by_id["music"]["incorrect_answers"], 1)
+        tiers = {option["tier"]: option for option in self.game.snapshot()["final_expert_options"]}
+        self.assertEqual(tiers["best"]["expert_id"], "football")
+        self.assertEqual(tiers["best"]["accuracy"], 1.0)
+        self.assertEqual(tiers["second_best"]["expert_id"], "music")
 
-    def test_final_correct_answer_wins(self) -> None:
+    def test_worst_expert_tier_wins_with_one_correct_answer(self) -> None:
         self.start_question()
         self.game.reveal_answer("B")
         self.game.advance()
@@ -138,9 +144,67 @@ class GameEngineTests(unittest.TestCase):
         self.game.reveal_answer("C")
         self.game.advance()
 
-        self.assertEqual(self.game.phase, GamePhase.FINAL_QUESTION)
+        self.assertEqual(self.game.phase, GamePhase.FINAL_EXPERT_SELECT)
+        with self.assertRaisesRegex(GameError, "expert must join"):
+            self.game.choose_final_expert("worst", set())
+        self.game.choose_final_expert("worst")
+        chosen_expert_id = self.game.final_expert_id
+        self.game.submit_expert_answer(chosen_expert_id, self.game.current_question.correct)
 
-        result = self.game.reveal_final_answer("A")
+        result = self.game.reveal_final_answer(self.game.current_question.correct)
+
+        self.assertEqual(result["type"], "game_won")
+        self.assertEqual(self.game.phase, GamePhase.GAME_WON)
+
+    def test_second_best_expert_tier_requires_two_correct_answers(self) -> None:
+        self.start_question()
+        self.game.reveal_answer("B")
+        self.game.advance()
+        self.game.choose_category("Music")
+        self.game.choose_shutdown("football")
+        self.game.resolve_landing("music")
+        self.game.confirm_landing()
+        self.game.reveal_answer("C")
+        self.game.advance()
+        self.game.choose_final_expert("second_best")
+
+        self.assertEqual(self.game.snapshot()["final_questions_required"], 2)
+        for question_number in range(2):
+            correct_answer = self.game.current_question.correct
+            self.game.submit_expert_answer(self.game.final_expert_id, correct_answer)
+            result = self.game.reveal_final_answer(correct_answer)
+            if question_number == 0:
+                self.assertEqual(result["type"], "final_correct")
+                self.game.advance()
+
+        self.assertEqual(result["type"], "game_won")
+        self.assertEqual(self.game.phase, GamePhase.GAME_WON)
+
+    def test_best_expert_requires_three_correct_answers(self) -> None:
+        self.start_question()
+        self.game.reveal_answer("B")
+        self.game.advance()
+        self.game.choose_category("Music")
+        self.game.choose_shutdown("football")
+        self.game.resolve_landing("music")
+        self.game.confirm_landing()
+        self.game.reveal_answer("C")
+        self.game.advance()
+        self.game.choose_final_expert("best")
+
+        self.assertEqual(self.game.snapshot()["final_questions_required"], 3)
+        other_expert_id = next(expert_id for expert_id in self.game.experts if expert_id != self.game.final_expert_id)
+        with self.assertRaisesRegex(GameError, "chosen expert must answer"):
+            self.game.reveal_final_answer(self.game.current_question.correct)
+        with self.assertRaisesRegex(GameError, "Only the chosen expert"):
+            self.game.submit_expert_answer(other_expert_id, "A")
+        for question_number in range(3):
+            correct_answer = self.game.current_question.correct
+            self.game.submit_expert_answer(self.game.final_expert_id, correct_answer)
+            result = self.game.reveal_final_answer(correct_answer)
+            if question_number < 2:
+                self.assertEqual(result["type"], "final_correct")
+                self.game.advance()
 
         self.assertEqual(result["type"], "game_won")
         self.assertEqual(self.game.phase, GamePhase.GAME_WON)
@@ -172,6 +236,23 @@ class GameEngineTests(unittest.TestCase):
 
         self.assertEqual(self.game.phase, GamePhase.QUESTION)
         self.assertTrue(self.powerups()["respin"]["used"])
+
+    def test_used_respin_does_not_skip_landing_on_later_category(self) -> None:
+        self.game.choose_category("Football")
+        self.game.choose_shutdown("music")
+        self.game.resolve_landing("football")
+        self.game.use_respin()
+        self.game.resolve_landing("football")
+        self.game.reveal_answer("B")
+        self.game.advance()
+
+        self.game.choose_category("Music")
+        self.game.choose_shutdown("football")
+        self.game.resolve_landing("music")
+
+        self.assertEqual(self.game.phase, GamePhase.LANDED)
+        self.game.confirm_landing()
+        self.assertEqual(self.game.phase, GamePhase.QUESTION)
 
     def test_respin_not_offered_on_shutdown_landing(self) -> None:
         self.game.choose_category("Football")
@@ -305,7 +386,8 @@ class GameEngineTests(unittest.TestCase):
         self.game.reveal_answer("C")
         self.game.advance()
 
-        self.assertEqual(self.game.phase, GamePhase.FINAL_QUESTION)
+        self.assertEqual(self.game.phase, GamePhase.FINAL_EXPERT_SELECT)
+        self.game.choose_final_expert("worst")
         self.assertFalse(any(powerup["available"] for powerup in self.powerups().values()))
         with self.assertRaises(GameError):
             self.game.use_fifty_fifty()

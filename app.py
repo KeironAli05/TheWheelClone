@@ -240,6 +240,15 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
                     expert_state["avatar_url"] = f"/participant-images/{identity['avatar_filename']}"
             expert_states.append(expert_state)
         state["experts"] = expert_states
+        if role == "host":
+            state["final_expert_options"] = [
+                {
+                    **option,
+                    "available": option["available"] and option["expert_id"] in expert_claims,
+                    "expert_joined": option["expert_id"] in expert_claims,
+                }
+                for option in cast(list[dict[str, object]], state["final_expert_options"])
+            ]
         if role == "display":
             player_snapshots = cast(list[dict[str, object]], state["players"])
             state["players"] = [
@@ -453,9 +462,12 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
                 elif action == "advance":
                     game.advance()
                     cue = "final_reveal" if game.phase.name == "FINAL_QUESTION" else None
+                elif action == "choose_final_expert":
+                    game.choose_final_expert(str(payload.get("tier", "")), set(expert_claims))
+                    cue = "final_reveal"
                 elif action == "reveal_final_answer":
                     result = game.reveal_final_answer(str(payload.get("answer", "")))
-                    cue = "victory" if result["type"] == "game_won" else "incorrect"
+                    cue = "victory" if result["type"] == "game_won" else "correct" if result["type"] == "final_correct" else "incorrect"
                 else:
                     raise GameError("Unknown host action.")
             broadcast_state()

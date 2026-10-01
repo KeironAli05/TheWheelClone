@@ -34,7 +34,9 @@
   function answerForm(title, action) {
     const question = latestState?.current_question;
     if (!question) return '';
-    return `<form class="control-block host-form answer-form" data-command="${action}"><h2>${escapeHtml(title)}</h2><div class="choice-grid">${question.options.map((option, index) => `<button class="answer-choice" type="submit" name="answer" value="${'ABCD'[index]}"><b>${'ABCD'[index]}</b><span>${escapeHtml(option)}</span></button>`).join('')}</div></form>`;
+    const waitingForFinalExpert = latestState?.phase === 'FINAL_QUESTION'
+      && !latestState.experts.find((expert) => expert.id === latestState.final_expert_id)?.answered;
+    return `<form class="control-block host-form answer-form" data-command="${action}"><h2>${escapeHtml(title)}</h2><div class="choice-grid">${question.options.map((option, index) => `<button class="answer-choice" type="submit" name="answer" value="${'ABCD'[index]}" ${waitingForFinalExpert ? 'disabled' : ''}><b>${'ABCD'[index]}</b><span>${escapeHtml(option)}</span></button>`).join('')}</div></form>`;
   }
 
   const findPowerup = (state, id) => (state.powerups || []).find((powerup) => powerup.id === id);
@@ -72,7 +74,7 @@
     const phaseTitle = {
       LOBBY: 'Ready when you are', PLAYER_SELECT: 'Pick a player', CATEGORY_SELECT: 'Choose their category',
       SHUTDOWN_SELECT: 'Shut an expert down', SPINNING: 'Spin the chair', LANDED: 'Keep or re-spin?', QUESTION: 'Question time',
-      ANSWER_REVEAL: 'The reveal', FINAL_QUESTION: 'The birthday question', GAME_WON: 'We have a winner'
+      ANSWER_REVEAL: 'The reveal', FINAL_EXPERT_SELECT: 'Choose your Birthday expert', FINAL_QUESTION: 'The birthday questions', GAME_WON: 'We have a winner'
     }[phase] || phase;
     byId('host-phase').textContent = phaseTitle;
     byId('host-round').textContent = state.current_category ? state.current_category.toUpperCase() : '';
@@ -83,8 +85,9 @@
       SPINNING: `${selectedPlayer} ${state.current_category ? `Category: ${state.current_category}.` : ''} Enter where the chair lands.`,
       LANDED: `${selectedPlayer} The chair landed on ${state.current_expert_name}.`,
       QUESTION: `${selectedPlayer} ${state.current_expert_name || ''} Experts have answered: ${state.expert_answer_count} / ${state.expert_answer_total}.`,
-      ANSWER_REVEAL: state.last_result?.type === 'correct' ? 'Correct. That category is cleared.' : state.last_result?.type === 'final_incorrect' ? 'Wrong. The run is over; all categories are back.' : 'Wrong. All cleared categories are back.',
-      FINAL_QUESTION: 'One last answer to win the presents.', GAME_WON: 'The birthday girl gets her presents!'
+      ANSWER_REVEAL: state.last_result?.type === 'final_correct' ? `Correct. ${state.final_questions_answered} of ${state.final_questions_required} Birthday questions answered.` : state.last_result?.type === 'correct' ? 'Correct. That category is cleared.' : state.last_result?.type === 'final_incorrect' ? 'Wrong. The run is over; all categories are back.' : 'Wrong. All cleared categories are back.',
+      FINAL_EXPERT_SELECT: 'All expert accuracy scores are in. Choose an expert to help with the Birthday questions.',
+      FINAL_QUESTION: `${state.final_expert_name} is helping. The player needs ${state.final_questions_required} correct Birthday answers.`, GAME_WON: 'The birthday girl gets her presents!'
     };
     byId('host-message').textContent = messages[phase] || '';
 
@@ -106,11 +109,13 @@
     } else if (phase === 'QUESTION') {
       controls.innerHTML = `<div class="control-block"><h2>Expert answers</h2><p class="control-note">${state.expert_answer_count} of ${state.expert_answer_total} submitted. Answers stay private until the reveal.</p></div>${powerupControls(state, experts)}${answerForm('Enter the player’s answer', 'reveal_answer')}`;
     } else if (phase === 'ANSWER_REVEAL') {
-      const resultName = state.last_result?.type === 'correct' ? 'PLAYER CORRECT' : state.last_result?.type === 'final_incorrect' ? 'FINAL ANSWER WRONG' : 'PLAYER WRONG · RUN RESET';
-      const advanceLabel = state.pending_final_question ? 'Go to final question' : state.last_result?.type === 'correct' ? 'Choose next category' : 'Select next player';
-      controls.innerHTML = `<div class="control-block"><h2>${resultName}</h2><p class="control-note">Correct answer: ${escapeHtml(state.current_question?.correct)}. Expert answers are shown in the roster.</p><button class="button button-lime" type="button" data-action="advance">${advanceLabel} <span aria-hidden="true">→</span></button></div>`;
+      const resultName = state.last_result?.type === 'final_correct' ? 'BIRTHDAY ANSWER CORRECT' : state.last_result?.type === 'correct' ? 'PLAYER CORRECT' : state.last_result?.type === 'final_incorrect' ? 'FINAL ANSWER WRONG' : 'PLAYER WRONG · RUN RESET';
+      const advanceLabel = state.pending_final_question ? state.last_result?.type === 'final_correct' ? 'Next Birthday question' : state.final_questions_required ? 'Continue' : 'Go to expert choice' : state.last_result?.type === 'correct' ? 'Choose next category' : 'Select next player';
+      controls.innerHTML = `<div class="control-block"><h2>${resultName}</h2><p class="control-note">Correct answer: ${escapeHtml(state.current_question?.correct)}. Expert answers are shown in the roster.${state.last_result?.type === 'final_correct' ? ` Score: ${state.final_correct_answers} / ${state.final_questions_required}.` : ''}</p><button class="button button-lime" type="button" data-action="advance">${advanceLabel} <span aria-hidden="true">→</span></button></div>`;
+    } else if (phase === 'FINAL_EXPERT_SELECT') {
+      controls.innerHTML = `<div class="control-block final-tier-block"><h2>Choose your expert</h2><p class="control-note">Expert accuracy from the main game. Your team must get every Birthday question in this tier correct.</p><div class="final-tier-options">${state.final_expert_options.map((option) => `<button class="final-tier-option" type="button" data-action="choose_final_expert" data-tier="${escapeHtml(option.tier)}" ${option.available ? '' : 'disabled'}><strong>${escapeHtml(option.label)}</strong><span>${escapeHtml(option.expert_name)} · ${Math.round(option.accuracy * 100)}% correct</span><small>${option.available ? `${option.questions_required} question${option.questions_required === 1 ? '' : 's'} · expert joined` : !option.expert_joined ? 'This expert must join first' : `Needs ${option.questions_required} unique Birthday questions; ${option.question_count} configured`}</small></button>`).join('')}</div></div>`;
     } else if (phase === 'FINAL_QUESTION') {
-      controls.innerHTML = answerForm('Enter the final answer', 'reveal_final_answer');
+      controls.innerHTML = `<div class="control-block"><h2>Birthday question ${state.final_questions_answered + 1} of ${state.final_questions_required}</h2><p class="control-note">${escapeHtml(state.final_expert_name)} must submit an answer before the player locks in.</p></div>${answerForm('Enter the player’s answer', 'reveal_final_answer')}`;
     } else if (phase === 'GAME_WON') {
       controls.innerHTML = `<div class="control-block"><h2>Birthday presents unlocked.</h2><button class="button button-coral" type="button" data-action="reset">Reset game</button></div>`;
     }
@@ -118,7 +123,7 @@
     byId('player-roster').innerHTML = state.players.length ? state.players.map((player) => `<li>${escapeHtml(player.name)}<small>${player.correct_answers} / ${player.questions_answered}</small></li>`).join('') : '<li class="empty-row">No players yet</li>';
     byId('expert-roster').innerHTML = experts.map((expert) => {
       const score = expert.questions_answered ? `${expert.correct_answers} / ${expert.questions_answered}` : 'No answers yet';
-      const details = expert.joined ? `${expert.category} · ${score}` : 'Not joined';
+      const details = expert.joined ? `${expert.category} · ${score} · ${Math.round(expert.accuracy * 100)}%` : `${expert.category} · ${score} · ${Math.round(expert.accuracy * 100)}% · Not joined`;
       const status = expert.locked ? ' · LOCKED' : expert.turn_shutdown ? ' · SHUT DOWN' : '';
       return `<li>${escapeHtml(expert.name)}<small>${escapeHtml(details)}${status}</small></li>`;
     }).join('') || '<li class="empty-row">No experts configured</li>';
@@ -144,6 +149,14 @@
         content.innerHTML = `<h2>${escapeHtml(state.current_question.text)}</h2><div class="answer-grid">${state.current_question.options.map((option, index) => `<button class="phone-answer" type="button" data-answer="${'ABCD'[index]}"><b>${'ABCD'[index]}</b><span>${escapeHtml(option)}</span></button>`).join('')}</div>`;
         return;
       }
+      if (state.phase === 'FINAL_QUESTION' && state.current_question && expertId === state.final_expert_id) {
+        if (expert?.answered) {
+          content.innerHTML = '<div class="answered-banner">ANSWER LOCKED ✓</div><p class="waiting-copy">Your Birthday answer is in. Discuss it with the player before the host locks theirs in.</p>';
+          return;
+        }
+        content.innerHTML = `<h2>Birthday question ${state.final_questions_answered + 1} of ${state.final_questions_required}</h2><p class="waiting-copy">Answer together, then help the player choose.</p><h2>${escapeHtml(state.current_question.text)}</h2><div class="answer-grid">${state.current_question.options.map((option, index) => `<button class="phone-answer" type="button" data-answer="${'ABCD'[index]}"><b>${'ABCD'[index]}</b><span>${escapeHtml(option)}</span></button>`).join('')}</div>`;
+        return;
+      }
       const status = isLocked ? 'LOCKED FOR THIS SPIN' : state.phase === 'ANSWER_REVEAL' ? 'REVEAL TIME' : state.phase === 'GAME_WON' ? 'GAME WON' : 'ACTIVE';
       content.innerHTML = `<div class="status-line"><span class="status-orb ${isLocked ? 'locked' : 'active'}"></span><strong>${status}</strong></div><p class="waiting-copy">${state.phase === 'ANSWER_REVEAL' ? 'The answer and expert results are on the screen.' : 'Your phone will show the question when it is time to answer.'}</p>`;
       return;
@@ -167,8 +180,10 @@
     latestState = state;
     const question = state.current_question;
     const phase = state.phase;
-    byId('display-category').textContent = state.current_category || (phase === 'PLAYER_SELECT' ? 'NEXT UP' : '');
-    byId('display-question').textContent = question?.text || (phase === 'LOBBY' ? 'Happy birthday!' : phase === 'GAME_WON' ? 'The birthday girl gets her presents!' : phase === 'PLAYER_SELECT' ? 'Who’s next?' : phase === 'LANDED' ? `Landed on ${state.current_expert_name}` : 'Get ready.');
+    byId('display-category').textContent = phase === 'FINAL_QUESTION'
+      ? `BIRTHDAY · QUESTION ${state.final_questions_answered + 1} OF ${state.final_questions_required}`
+      : state.current_category || (phase === 'PLAYER_SELECT' ? 'NEXT UP' : '');
+    byId('display-question').textContent = question?.text || (phase === 'LOBBY' ? 'Happy birthday!' : phase === 'GAME_WON' ? 'The birthday girl gets her presents!' : phase === 'PLAYER_SELECT' ? 'Who’s next?' : phase === 'LANDED' ? `Landed on ${state.current_expert_name}` : phase === 'FINAL_EXPERT_SELECT' ? 'Choose your Birthday expert' : 'Get ready.');
     byId('active-player-name').textContent = state.current_player_name || 'No player yet';
     const activePlayer = state.players.find((player) => player.id === state.current_player_id);
     const activePlayerPhoto = byId('active-player-photo');
@@ -176,6 +191,7 @@
     activePlayerPhoto.src = activePlayer?.avatar_url || '';
     activePlayerPhoto.alt = activePlayer?.avatar_url ? `${activePlayer.name}'s photo` : '';
     byId('display-subtext').hidden = Boolean(question);
+    if (phase === 'FINAL_EXPERT_SELECT') byId('display-subtext').textContent = state.final_expert_options.map((option) => `${option.label}: ${option.expert_name} · ${Math.round(option.accuracy * 100)}% · ${option.questions_required}/${option.questions_required} needed`).join('   |   ');
     byId('answer-count').textContent = `${state.expert_answer_count} / ${state.expert_answer_total} in`;
     const revealed = phase === 'ANSWER_REVEAL' || phase === 'GAME_WON';
     const playerAnswer = revealed ? state.player_answer : null;
@@ -188,7 +204,7 @@
       return `<div class="${classes.join(' ')}"><b>${letter}</b><span>${escapeHtml(option)}</span></div>`;
     }).join('') : '';
     renderPowerupEffects(state);
-    const resultLabel = state.last_result?.type === 'correct' ? 'CORRECT · CATEGORY CLEARED' : state.last_result?.type === 'incorrect' ? 'WRONG · ALL CATEGORIES RESET' : state.last_result?.type === 'final_incorrect' ? 'NOT THIS TIME · RUN RESET' : state.last_result?.type === 'game_won' ? 'THE WHEEL IS WON' : '';
+    const resultLabel = state.last_result?.type === 'correct' ? 'CORRECT · CATEGORY CLEARED' : state.last_result?.type === 'incorrect' ? 'WRONG · ALL CATEGORIES RESET' : state.last_result?.type === 'final_correct' ? `BIRTHDAY ANSWER CORRECT · ${state.final_correct_answers} / ${state.final_questions_required}` : state.last_result?.type === 'final_incorrect' ? 'NOT THIS TIME · RUN RESET' : state.last_result?.type === 'game_won' ? 'THE WHEEL IS WON' : '';
     byId('display-result').textContent = revealed ? resultLabel : '';
     byId('category-list').innerHTML = state.categories.map((category) => `<div class="category-item ${category.cleared ? 'cleared' : ''} ${category.name === state.current_category ? 'current' : ''}"><span>${escapeHtml(category.name)}</span><i></i></div>`).join('');
     byId('progress-count').textContent = `${state.categories.filter((category) => category.cleared).length} / ${state.categories.length}`;
@@ -200,7 +216,7 @@
         : `<span class="player-photo-fallback" aria-hidden="true">${escapeHtml(player.name.charAt(0).toUpperCase())}</span>`;
       return `<li class="player-item ${isActive ? 'active' : ''}"><span class="player-identity">${portrait}<span>${escapeHtml(player.name)}</span></span>${isActive ? '<span class="roster-status">IN CHAIR</span>' : ''}</li>`;
     }).join('') : '<li class="empty-roster">No players yet</li>';
-    byId('display-experts').innerHTML = state.experts.map((expert) => `<li class="expert-item ${expert.locked ? 'locked' : ''} ${expert.selected ? 'selected' : ''} ${expert.category === state.current_category ? 'specialist' : ''}"><span class="expert-identity">${expert.avatar_url ? `<img class="expert-photo" src="${escapeHtml(expert.avatar_url)}" alt="">` : ''}<span>${escapeHtml(expert.name)}</span></span><span class="expert-answer">${revealed ? escapeHtml(state.expert_answers[expert.id] || '—') : expert.answered ? 'IN' : ''}</span></li>`).join('');
+    byId('display-experts').innerHTML = state.experts.map((expert) => `<li class="expert-item ${expert.locked ? 'locked' : ''} ${expert.selected || expert.id === state.final_expert_id ? 'selected' : ''} ${expert.category === state.current_category ? 'specialist' : ''}"><span class="expert-identity">${expert.avatar_url ? `<img class="expert-photo" src="${escapeHtml(expert.avatar_url)}" alt="">` : ''}<span>${escapeHtml(expert.name)}</span></span><span class="expert-answer">${phase === 'FINAL_EXPERT_SELECT' || phase === 'FINAL_QUESTION' ? `${Math.round(expert.accuracy * 100)}%` : revealed ? escapeHtml(state.expert_answers[expert.id] || '—') : expert.answered ? 'IN' : ''}</span></li>`).join('');
     renderShareLink(phase);
     if (phase === 'CATEGORY_SELECT' && previousPhase === 'PLAYER_SELECT') animatePlayerSelection(state);
     else if (phase !== 'CATEGORY_SELECT') hidePlayerReveal();

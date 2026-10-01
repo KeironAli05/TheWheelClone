@@ -532,13 +532,19 @@ class GamePhase(Enum):
     LANDED = auto()            # host enters landed expert
     QUESTION = auto()          # experts answering on phones
     ANSWER_REVEAL = auto()     # host entered player answer, reveal
-    FINAL_QUESTION = auto()    # Birthday question
+    FINAL_EXPERT_SELECT = auto()  # Choose a ranked Birthday helper
+    FINAL_QUESTION = auto()       # Birthday question sequence
     GAME_WON = auto()
 ```
 
 A landed-on shut-down expert goes straight from `LANDED` back to
-`PLAYER_SELECT`. A wrong answer at `ANSWER_REVEAL` or `FINAL_QUESTION`
-resets all cleared categories.
+`PLAYER_SELECT`. A wrong answer at `ANSWER_REVEAL` or any question in
+`FINAL_QUESTION` resets all cleared categories. After the regular
+categories are cleared, the host presents all expert accuracy percentages
+and the player chooses the best, second-best, or worst expert. Their chosen
+expert answers each Birthday question with them. The challenge requires
+every answer correct: three questions with the best expert, two with the
+second-best, and one with the worst.
 
 The exact states can evolve alongside the game, but the important
 principle is that the backend should have **one authoritative

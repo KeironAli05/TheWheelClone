@@ -10,6 +10,11 @@ POWERUPS = {
     "peek": "Peek at an Expert",
     "respin": "Re-spin",
 }
+FINAL_TIERS = {
+    "best": {"label": "Best expert", "rank": 0, "questions": 3},
+    "second_best": {"label": "Second-best expert", "rank": 1, "questions": 2},
+    "worst": {"label": "Worst expert", "rank": -1, "questions": 1},
+}
 
 
 class GameError(ValueError):
@@ -59,6 +64,12 @@ class GameEngine:
         self.player_answer: str | None = None
         self.last_result: dict[str, object] | None = None
         self._pending_final_question = False
+        self.final_tier: str | None = None
+        self.final_expert_id: str | None = None
+        self.final_questions_required = 0
+        self.final_questions_answered = 0
+        self.final_correct_answers = 0
+        self._respin_pending = False
         self.fifty_fifty_removed: list[str] = []
         self.peek_expert_id: str | None = None
         self.audience_status: str | None = None
@@ -120,7 +131,8 @@ class GameEngine:
             return False
 
         self.current_expert_id = expert_id
-        if "respin" in self._current_player().used_powerups:
+        if self._respin_pending:
+            self._respin_pending = False
             self._show_question()
         else:
             self.phase = GamePhase.LANDED
@@ -134,6 +146,7 @@ class GameEngine:
         self._require_phase(GamePhase.LANDED)
         self._use_powerup("respin")
         self.current_expert_id = None
+        self._respin_pending = True
         self.phase = GamePhase.SPINNING
 
     def use_fifty_fifty(self) -> list[str]:
@@ -181,7 +194,11 @@ class GameEngine:
         self.audience_status = "closed"
 
     def submit_expert_answer(self, expert_id: str, answer: str) -> None:
-        self._require_phase(GamePhase.QUESTION)
+        if self.phase is GamePhase.FINAL_QUESTION:
+            if expert_id != self.final_expert_id:
+                raise GameError("Only the chosen expert can answer the Birthday questions.")
+        else:
+            self._require_phase(GamePhase.QUESTION)
         self._require_expert(expert_id)
         normalized = answer.upper()
         if normalized not in {"A", "B", "C", "D"}:
@@ -220,14 +237,21 @@ class GameEngine:
     def advance(self) -> None:
         self._require_phase(GamePhase.ANSWER_REVEAL)
         if self._pending_final_question:
-            self.current_category = "Birthday"
-            self.current_question = self._draw_question("Birthday")
-            self.current_expert_id = None
-            self.expert_answers.clear()
-            self.player_answer = None
-            self._pending_final_question = False
-            self._clear_powerup_effects()
-            self.phase = GamePhase.FINAL_QUESTION
+            if self.final_expert_id:
+                self.current_question = self._draw_question("Birthday")
+                self.expert_answers.clear()
+                self.player_answer = None
+                self._pending_final_question = False
+                self.phase = GamePhase.FINAL_QUESTION
+            else:
+                self.current_category = "Birthday"
+                self.current_question = None
+                self.current_expert_id = None
+                self.expert_answers.clear()
+                self.player_answer = None
+                self._pending_final_question = False
+                self._clear_powerup_effects()
+                self.phase = GamePhase.FINAL_EXPERT_SELECT
             return
         if self.last_result and self.last_result.get("type") == "correct":
             self._continue_player()
@@ -236,6 +260,8 @@ class GameEngine:
 
     def reveal_final_answer(self, player_answer: str) -> dict[str, object]:
         self._require_phase(GamePhase.FINAL_QUESTION)
+        if self.final_expert_id not in self.expert_answers:
+            raise GameError("The chosen expert must answer before the player locks in.")
         normalized = player_answer.upper()
         if normalized not in {"A", "B", "C", "D"}:
             raise GameError("Answers must be A, B, C, or D.")
@@ -243,17 +269,52 @@ class GameEngine:
         assert question is not None
         player = self._current_player()
         player.questions_answered += 1
+        self.final_questions_answered += 1
+        self.player_answer = normalized
         if normalized == question.correct:
             player.correct_answers += 1
-            self.last_result = {"type": "game_won", "player_id": player.id}
-            self.phase = GamePhase.GAME_WON
+            self.final_correct_answers += 1
+            if self.final_correct_answers == self.final_questions_required:
+                self.last_result = {"type": "game_won", "player_id": player.id}
+                self.phase = GamePhase.GAME_WON
+            else:
+                self.last_result = {"type": "final_correct", "player_id": player.id}
+                self._pending_final_question = True
+                self.phase = GamePhase.ANSWER_REVEAL
         else:
             self.last_result = {"type": "final_incorrect", "player_id": player.id}
             self.cleared_categories.clear()
-            self.phase = GamePhase.ANSWER_REVEAL
             self._pending_final_question = False
-        self.player_answer = normalized
+            self.phase = GamePhase.ANSWER_REVEAL
         return self.last_result
+
+    def choose_final_expert(self, tier: str, joined_expert_ids: set[str] | None = None) -> None:
+        self._require_phase(GamePhase.FINAL_EXPERT_SELECT)
+        if tier not in FINAL_TIERS:
+            raise GameError("Choose the best, second-best, or worst expert.")
+        tier_config = FINAL_TIERS[tier]
+        question_count = len(self._all_questions_by_category("Birthday"))
+        if question_count < tier_config["questions"]:
+            raise GameError(
+                f"The {tier_config['label'].lower()} option needs {tier_config['questions']} unique Birthday questions; "
+                f"only {question_count} are configured."
+            )
+        ranked_experts = sorted(self.experts.values(), key=lambda expert: -self._expert_accuracy(expert.id))
+        rank = tier_config["rank"]
+        expert_index = min(rank, len(ranked_experts) - 1) if rank >= 0 else len(ranked_experts) - 1
+        selected_expert = ranked_experts[expert_index]
+        if joined_expert_ids is not None and selected_expert.id not in joined_expert_ids:
+            raise GameError("The chosen expert must join before the Birthday challenge.")
+        self.final_tier = tier
+        self.final_expert_id = selected_expert.id
+        self.final_questions_required = tier_config["questions"]
+        self.final_questions_answered = 0
+        self.final_correct_answers = 0
+        self.questions_by_category["Birthday"] = self._all_questions_by_category("Birthday")
+        self.current_question = self._draw_question("Birthday")
+        self.expert_answers.clear()
+        self.player_answer = None
+        self.phase = GamePhase.FINAL_QUESTION
 
     def reset(self) -> None:
         self.phase = GamePhase.LOBBY
@@ -268,6 +329,12 @@ class GameEngine:
         self.player_answer = None
         self.last_result = None
         self._pending_final_question = False
+        self.final_tier = None
+        self.final_expert_id = None
+        self.final_questions_required = 0
+        self.final_questions_answered = 0
+        self.final_correct_answers = 0
+        self._respin_pending = False
         self._clear_powerup_effects()
         self.questions_by_category = defaultdict(list)
         for question in self._all_questions:
@@ -283,6 +350,25 @@ class GameEngine:
     def snapshot(self, reveal_expert_answers: bool = False) -> dict[str, object]:
         question = self.current_question
         current_player = self.players.get(self.current_player_id) if self.current_player_id else None
+        ranked_experts = sorted(self.experts.values(), key=lambda expert: -self._expert_accuracy(expert.id))
+        birthday_question_count = len(self._all_questions_by_category("Birthday"))
+        final_expert_options = []
+        for tier, config in FINAL_TIERS.items():
+            rank = config["rank"]
+            expert_index = min(rank, len(ranked_experts) - 1) if rank >= 0 else len(ranked_experts) - 1
+            expert = ranked_experts[expert_index]
+            final_expert_options.append(
+                {
+                    "tier": tier,
+                    "label": config["label"],
+                    "expert_id": expert.id,
+                    "expert_name": expert.name,
+                    "accuracy": self._expert_accuracy(expert.id),
+                    "questions_required": config["questions"],
+                    "question_count": birthday_question_count,
+                    "available": birthday_question_count >= config["questions"],
+                }
+            )
         return {
             "phase": self.phase.name,
             "players": [
@@ -332,6 +418,13 @@ class GameEngine:
             "current_expert_id": self.current_expert_id,
             "current_expert_name": self.experts[self.current_expert_id].name if self.current_expert_id else None,
             "pending_final_question": self._pending_final_question,
+            "final_tier": self.final_tier,
+            "final_expert_id": self.final_expert_id,
+            "final_expert_name": self.experts[self.final_expert_id].name if self.final_expert_id else None,
+            "final_questions_required": self.final_questions_required,
+            "final_questions_answered": self.final_questions_answered,
+            "final_correct_answers": self.final_correct_answers,
+            "final_expert_options": final_expert_options,
             "current_question": (
                 {
                     "id": question.id,
@@ -443,6 +536,15 @@ class GameEngine:
             expert_id for expert_id, answer in self.expert_answers.items() if answer != question.correct
         }
 
+    def _expert_accuracy(self, expert_id: str) -> float:
+        stats = self.expert_stats[expert_id]
+        if not stats["questions_answered"]:
+            return 0.0
+        return stats["correct_answers"] / stats["questions_answered"]
+
+    def _all_questions_by_category(self, category: str) -> list[Question]:
+        return [question for question in self._all_questions if question.category == category]
+
     def _finish_turn(self) -> None:
         self.phase = GamePhase.PLAYER_SELECT
         self.current_player_id = None
@@ -460,6 +562,12 @@ class GameEngine:
         self.expert_answers.clear()
         self.player_answer = None
         self._pending_final_question = False
+        self.final_tier = None
+        self.final_expert_id = None
+        self.final_questions_required = 0
+        self.final_questions_answered = 0
+        self.final_correct_answers = 0
+        self._respin_pending = False
         self._clear_powerup_effects()
 
     def _current_player(self) -> Player:

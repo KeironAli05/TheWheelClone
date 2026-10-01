@@ -290,8 +290,20 @@ There is one final challenge.
 
 # 13. The Birthday Girl Question 🎂
 
-Once all categories have been successfully cleared, the player must
-answer **one final question about the birthday girl**.
+Once all categories have been successfully cleared, the player sees the
+accuracy percentage for every expert and chooses one of three options:
+
+-   **Best expert:** the expert with the highest accuracy; answer three
+  Birthday questions correctly out of three.
+-   **Second-best expert:** the expert ranked second by accuracy; answer
+  two Birthday questions correctly out of two.
+-   **Worst expert:** the expert with the lowest accuracy; answer one
+  Birthday question correctly.
+
+The chosen expert answers each question and helps the player before the
+host locks in the player's answer. Every question in the chosen challenge
+must be answered correctly to win. The Birthday question pool must have
+at least as many unique questions as the selected challenge requires.
 
 This question is separate from the normal categories.
 
@@ -329,7 +341,7 @@ The game is over.
 
 # 15. Failing the Final Question
 
-If the player clears every category but gets the birthday question
+If the player gets any Birthday question in their chosen challenge
 wrong:
 
 > **They fail the run.**

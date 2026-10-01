@@ -46,7 +46,7 @@ Players and experts can optionally add a photo when joining. JPG, PNG, WebP, and
 Edit the CSV files before starting the server:
 
 - `data/experts.csv`: one row per expert, with `name,category` columns. Expert names must be unique. `Birthday` is reserved for the final question.
-- `data/questions.csv`: one row per question, with `category,question,a,b,c,d,correct` columns. `correct` must be `A`, `B`, `C`, or `D`; question categories must match an expert category or `Birthday`.
+- `data/questions.csv`: one row per question, with `category,question,a,b,c,d,correct` columns. `correct` must be `A`, `B`, `C`, or `D`; question categories must match an expert category or `Birthday`. The finale needs up to three unique Birthday questions: three for the best expert, two for the second-best, and one for the worst.
 
 Every configured category and `Birthday` need at least one question. Questions are drawn randomly without repeats until a category's pool is used up. The app reports invalid data at startup with the filename and row.
 

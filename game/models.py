@@ -11,6 +11,7 @@ class GamePhase(Enum):
     LANDED = auto()
     QUESTION = auto()
     ANSWER_REVEAL = auto()
+    FINAL_EXPERT_SELECT = auto()
     FINAL_QUESTION = auto()
     GAME_WON = auto()
 
