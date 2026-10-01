@@ -33,12 +33,46 @@ class Question:
 
 
 @dataclass
+class Scorecard:
+    answered: int = 0
+    correct: int = 0
+    streak: int = 0
+    best_streak: int = 0
+    by_category: dict[str, list[int]] = field(default_factory=dict)
+
+    def record(self, category: str, correct: bool) -> None:
+        self.answered += 1
+        totals = self.by_category.setdefault(category, [0, 0])
+        totals[0] += 1
+        if correct:
+            self.correct += 1
+            totals[1] += 1
+            self.streak += 1
+            self.best_streak = max(self.best_streak, self.streak)
+        else:
+            self.streak = 0
+
+    @property
+    def accuracy(self) -> float:
+        return self.correct / self.answered if self.answered else 0.0
+
+
+@dataclass
 class Player:
     id: str
     name: str
-    questions_answered: int = 0
-    correct_answers: int = 0
+    score: Scorecard = field(default_factory=Scorecard)
+    chair_answered: int = 0
+    chair_correct: int = 0
     used_powerups: set[str] = field(default_factory=set)
+
+    @property
+    def questions_answered(self) -> int:
+        return self.score.answered
+
+    @property
+    def correct_answers(self) -> int:
+        return self.score.correct
 
     @property
     def incorrect_answers(self) -> int:
@@ -46,6 +80,4 @@ class Player:
 
     @property
     def accuracy(self) -> float:
-        if not self.questions_answered:
-            return 0.0
-        return self.correct_answers / self.questions_answered
+        return self.score.accuracy

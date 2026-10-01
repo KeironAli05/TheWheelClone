@@ -241,6 +241,8 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
             expert_states.append(expert_state)
         state["experts"] = expert_states
         if role == "host":
+            state["host_correct"] = game.current_question.correct if game.current_question else None
+            state["awards"] = game.awards()
             state["final_expert_options"] = [
                 {
                     **option,
@@ -263,11 +265,15 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
                 for player in player_snapshots
             ]
         if role == "player":
-            state["current_question"] = None
+            # Players off the chair answer along on their phones; the chair player answers out loud.
+            if participant_id == game.current_player_id or game.phase.name not in {
+                "QUESTION", "FINAL_QUESTION", "ANSWER_REVEAL", "GAME_WON"
+            }:
+                state["current_question"] = None
             state["expert_answers"] = {}
             state["player_answer"] = None
             state["peek"] = None
-            state["audience_voted"] = participant_id in game.audience_votes
+            state["my_guess"] = game.player_guesses.get(participant_id or "")
         return state
 
     def broadcast_lobby() -> None:
@@ -368,7 +374,8 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
         if not re.fullmatch(r"[0-9a-f]{32}\.jpg", filename):
             abort(404)
         response = send_from_directory(upload_directory, filename, mimetype="image/jpeg", max_age=0)
-        response.headers["Cache-Control"] = "no-store"
+        # Filenames are random and never reused, so browsers may cache them; "private" keeps proxies like Cloudflare from storing them.
+        response.headers["Cache-Control"] = "private, max-age=86400, immutable"
         return response
 
     @app.get("/host")
@@ -417,7 +424,6 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
         if not identity or identity["role"] != "host":
             return {"ok": False, "error": "Only the host can control the game."}
         action = str(payload.get("action", ""))
-        cue: str | None = None
         try:
             with lock:
                 if action == "start":
@@ -425,22 +431,15 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
                 elif action == "reset":
                     game.reset()
                 elif action == "select_player":
-                    chosen = game.select_player()
-                    cue = "player_select"
+                    game.select_player()
                 elif action == "choose_category":
                     game.choose_category(str(payload.get("category", "")))
                 elif action == "choose_shutdown":
                     game.choose_shutdown(str(payload.get("expert_id", "")))
-                elif action == "spin":
-                    if game.phase.name != "SPINNING":
-                        raise GameError("The spin is not ready yet.")
-                    cue = "spin"
                 elif action == "resolve_landing":
                     game.resolve_landing(str(payload.get("expert_id", "")))
-                    cue = "question" if game.phase.name == "QUESTION" else "spin_stop"
                 elif action == "confirm_landing":
                     game.confirm_landing()
-                    cue = "question"
                 elif action == "use_powerup":
                     powerup = str(payload.get("powerup", ""))
                     if powerup == "respin":
@@ -453,27 +452,28 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
                         game.start_audience_vote()
                     else:
                         raise GameError("Unknown power-up.")
-                    cue = "powerup"
                 elif action == "close_vote":
                     game.close_audience_vote()
+                elif action == "awards_start":
+                    game.start_awards()
+                elif action == "awards_next":
+                    game.next_award()
+                elif action == "awards_back":
+                    game.previous_award()
+                elif action == "awards_end":
+                    game.end_awards()
                 elif action == "reveal_answer":
-                    result = game.reveal_answer(str(payload.get("answer", "")))
-                    cue = "correct" if result["type"] == "correct" else "incorrect"
+                    game.reveal_answer(str(payload.get("answer", "")))
                 elif action == "advance":
                     game.advance()
-                    cue = "final_reveal" if game.phase.name == "FINAL_QUESTION" else None
                 elif action == "choose_final_expert":
                     game.choose_final_expert(str(payload.get("tier", "")), set(expert_claims))
-                    cue = "final_reveal"
                 elif action == "reveal_final_answer":
-                    result = game.reveal_final_answer(str(payload.get("answer", "")))
-                    cue = "victory" if result["type"] == "game_won" else "correct" if result["type"] == "final_correct" else "incorrect"
+                    game.reveal_final_answer(str(payload.get("answer", "")))
                 else:
                     raise GameError("Unknown host action.")
             broadcast_state()
             broadcast_lobby()
-            if cue:
-                socketio.emit("cue", {"name": cue}, to="display")
             return {"ok": True}
         except (GameError, ValueError) as error:
             return {"ok": False, "error": str(error)}
@@ -491,14 +491,14 @@ def create_app(testing: bool = False, data_dir: Path | None = None) -> Flask:
         except GameError as error:
             return {"ok": False, "error": str(error)}
 
-    @socketio.on("submit_vote")
-    def on_submit_vote(payload: dict[str, object]):
+    @socketio.on("submit_guess")
+    def on_submit_guess(payload: dict[str, object]):
         identity = current_identity()
         if not identity or identity["role"] != "player":
-            return {"ok": False, "error": "Only joined players can vote."}
+            return {"ok": False, "error": "Only joined players can answer."}
         try:
             with lock:
-                game.submit_audience_vote(identity["id"], str(payload.get("answer", "")))
+                game.submit_guess(identity["id"], str(payload.get("answer", "")))
             broadcast_state()
             return {"ok": True}
         except GameError as error:

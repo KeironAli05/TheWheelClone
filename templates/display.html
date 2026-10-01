@@ -10,7 +10,7 @@
   <script src="{{ url_for('static', filename='js/game.js') }}" defer></script>
 </head>
 <body class="display-page" data-page="display">
-  <header class="display-header"><span class="display-brand">THE <b>WHEEL</b></span><div class="display-tools"><button class="audio-toggle" id="audio-toggle" type="button" aria-label="Enable TV audio" title="Enable TV audio">♫ <span>Sound off</span></button><span class="display-status"><i></i> LIVE GAME</span></div></header>
+  <header class="display-header"><span class="display-brand">THE <b>WHEEL</b></span><div class="display-tools"><span class="display-status"><i></i> LIVE GAME</span></div></header>
   <main class="display-main">
     <section class="display-stage" id="display-stage">
       <div class="player-reveal" id="player-reveal" hidden></div>
@@ -35,6 +35,8 @@
       <section class="powerup-block"><div class="rail-heading"><h2>Power-ups</h2></div><div class="powerup-strip" id="powerup-strip"></div></section>
     </aside>
   </main>
-  <audio id="game-audio" preload="none"></audio>
+  <section class="awards-overlay" id="awards-overlay" hidden aria-live="polite">
+    <div class="awards-stage" id="awards-stage"></div>
+  </section>
 </body>
 </html>

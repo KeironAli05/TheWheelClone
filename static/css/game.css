@@ -132,8 +132,6 @@ button { color: inherit; }
 .display-page { overflow: hidden; background: radial-gradient(ellipse at 31% 43%, rgba(108,199,255,.08), transparent 45rem), #101322; }
 .display-header { display: flex; height: 68px; align-items: center; justify-content: space-between; padding: 0 3.7vw; border-bottom: 1px solid var(--line); }
 .display-tools { display: flex; align-items: center; gap: 20px; }
-.audio-toggle { display: inline-flex; min-height: 34px; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid var(--line); border-radius: 2px; color: var(--muted); background: transparent; cursor: pointer; font-size: .75rem; }
-.audio-toggle[aria-pressed="true"] { border-color: var(--teal); color: var(--teal); }
 .display-brand { font-size: .88rem; }
 .display-status { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: .65rem; }
 .display-main { display: grid; height: calc(100vh - 68px); grid-template-columns: minmax(0, 1fr) minmax(250px, 22vw); }
@@ -204,6 +202,34 @@ button { color: inherit; }
 .powerup-controls .powerup-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
 .vote-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .vote-grid .phone-answer { justify-content: center; min-height: 72px; }
+.phone-answer:disabled { opacity: .3; cursor: not-allowed; }
+.answer-choice.is-host-correct { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+.answer-choice.is-host-correct b { background: var(--gold); }
+.host-answer-key { margin: -4px 0 0; color: var(--gold); font-size: .9rem; }
+.answered-banner.is-wrong { background: var(--coral); }
+.ask-banner { margin: 0 0 12px; padding: 8px 11px; color: #1b100e; background: var(--coral); font-size: .72rem; font-weight: 800; letter-spacing: .08em; }
+.my-score { margin-top: 18px; color: var(--muted); font-size: .85rem; }
+.my-score b { color: var(--paper); }
+.player-score { flex: 0 0 auto; color: var(--paper); font-weight: 700; }
+.awards-block { margin-top: 12px; }
+.awards-block .awards-control { width: 100%; }
+.awards-secondary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.award-order { display: grid; gap: 6px; padding: 0; margin: 14px 0 0; list-style: none; }
+.award-order li { display: grid; gap: 1px; padding: 7px 10px; border-left: 3px solid var(--line); color: var(--muted); font-size: .76rem; }
+.award-order li b { color: var(--paper); font-weight: 700; }
+.award-order li.current { border-color: var(--gold); background: rgba(255,209,102,.08); }
+.award-order li.done { opacity: .45; }
+.awards-overlay { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 6vh 6vw; background: radial-gradient(ellipse at 50% 40%, rgba(255,209,102,.12), transparent 40rem), #101322; text-align: center; }
+.awards-stage { display: grid; justify-items: center; gap: 2vh; max-width: 1200px; }
+.awards-stage.animate { animation: pop-in .5s ease both; }
+.awards-kicker { margin: 0; color: var(--gold); font-size: clamp(.9rem, 1.4vw, 1.2rem); font-weight: 800; letter-spacing: .2em; }
+.awards-heading { margin: 0; font: 900 clamp(3rem, 7vw, 7rem)/.9 var(--display); overflow-wrap: anywhere; }
+.awards-heading b { color: var(--gold); }
+.awards-sub { margin: 0; color: var(--muted); font-size: clamp(1rem, 1.8vw, 1.6rem); }
+.awards-drumroll { margin: 4vh 0 0; color: var(--lime); font: 700 clamp(1.6rem, 3vw, 2.8rem) var(--display); animation: pulse 1.2s ease-in-out infinite; }
+.awards-winner { margin: 4vh 0 0; color: var(--gold); font: 900 clamp(3.4rem, 9vw, 9rem)/.9 var(--display); text-shadow: 0 0 40px rgba(255,209,102,.35); overflow-wrap: anywhere; animation: pop-in .6s ease both; }
+.awards-stat { margin: 0; color: var(--paper); font-size: clamp(1.1rem, 2vw, 1.8rem); font-weight: 700; }
+@keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 
 @keyframes rise-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pop-in { 0% { opacity: 0; transform: scale(.92); } 75% { transform: scale(1.025); } 100% { opacity: 1; transform: scale(1); } }
@@ -229,7 +255,6 @@ button { color: inherit; }
   .role-option { min-height: 60px; }
   .display-header { height: 56px; padding: 0 18px; }
   .display-tools { gap: 10px; }
-  .audio-toggle span { display: none; }
   .display-stage { min-height: 57vh; padding-right: 18px; padding-left: 18px; }
   .display-question { font-size: 2.65rem; }
   .display-option { min-height: 50px; gap: 7px; font-size: .83rem; }

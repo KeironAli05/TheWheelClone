@@ -268,19 +268,34 @@ class WebAppTests(unittest.TestCase):
 
         voter_socket.get_received()
         chair_socket = self.socketio.test_client(self.app, flask_test_client=chair_client)
-        self.assertFalse(chair_socket.emit("submit_vote", {"answer": "A"}, callback=True)["ok"])
-        self.assertFalse(host_socket.emit("submit_vote", {"answer": "A"}, callback=True)["ok"])
-        self.assertTrue(voter_socket.emit("submit_vote", {"answer": "C"}, callback=True)["ok"])
+        chair_state = [event for event in chair_socket.get_received() if event["name"] == "state"][-1]["args"][0]
+        self.assertIsNone(chair_state["current_question"])
+        self.assertFalse(chair_socket.emit("submit_guess", {"answer": "A"}, callback=True)["ok"])
+        self.assertFalse(host_socket.emit("submit_guess", {"answer": "A"}, callback=True)["ok"])
+        self.assertTrue(voter_socket.emit("submit_guess", {"answer": "C"}, callback=True)["ok"])
 
         voter_state = [event for event in voter_socket.get_received() if event["name"] == "state"][-1]["args"][0]
-        self.assertTrue(voter_state["audience_voted"])
+        self.assertEqual(voter_state["my_guess"], "C")
         self.assertIsNone(voter_state["peek"])
-        self.assertIsNone(voter_state["current_question"])
+        self.assertEqual(voter_state["current_question"]["text"], game.current_question.text)
+        self.assertIsNone(voter_state["current_question"]["correct"])
+        self.assertNotIn("host_correct", voter_state)
+        host_state = [event for event in host_socket.get_received() if event["name"] == "state"][-1]["args"][0]
+        self.assertEqual(host_state["host_correct"], game.current_question.correct)
 
         self.assertTrue(send({"action": "close_vote"})["ok"])
         self.assertEqual(game.snapshot()["audience"]["counts"]["C"], 1)
         self.assertEqual(game.players[voter_id].used_powerups, set())
         self.assertEqual(game.players[chair_id].used_powerups, {"respin", "fifty_fifty", "peek", "ask_players"})
+
+        self.assertTrue(send({"action": "reveal_answer", "answer": "A"})["ok"])
+        self.assertTrue(send({"action": "awards_start"})["ok"])
+        self.assertTrue(send({"action": "awards_next"})["ok"])
+        voter_state = [event for event in voter_socket.get_received() if event["name"] == "state"][-1]["args"][0]
+        self.assertNotIn("awards", voter_state)
+        self.assertIsNone(voter_state["awards_show"]["award"]["winners"])
+        self.assertTrue(send({"action": "awards_end"})["ok"])
+        self.assertIsNone(game.awards_step)
 
         for client in (host_socket, voter_socket, chair_socket):
             client.disconnect()

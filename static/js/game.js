@@ -5,12 +5,19 @@
   let latestState = null;
   let previousPhase = null;
   let revealTimer = null;
-  let audioEnabled = false;
   let shareLinkState = { status: 'starting', url: null, message: 'The address will appear here when it is ready.' };
 
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   })[character]);
+
+  // Rebuilding unchanged markup recreates <img> tags and restarts their downloads.
+  const renderedHtml = new WeakMap();
+  function setHtmlIfChanged(node, html) {
+    if (renderedHtml.get(node) === html) return;
+    node.innerHTML = html;
+    renderedHtml.set(node, html);
+  }
 
   function showToast(target, message) {
     const node = byId(target);
@@ -36,7 +43,37 @@
     if (!question) return '';
     const waitingForFinalExpert = latestState?.phase === 'FINAL_QUESTION'
       && !latestState.experts.find((expert) => expert.id === latestState.final_expert_id)?.answered;
-    return `<form class="control-block host-form answer-form" data-command="${action}"><h2>${escapeHtml(title)}</h2><div class="choice-grid">${question.options.map((option, index) => `<button class="answer-choice" type="submit" name="answer" value="${'ABCD'[index]}" ${waitingForFinalExpert ? 'disabled' : ''}><b>${'ABCD'[index]}</b><span>${escapeHtml(option)}</span></button>`).join('')}</div></form>`;
+    const correct = latestState.host_correct;
+    const correctText = correct ? question.options['ABCD'.indexOf(correct)] : '';
+    const answerNote = correct ? `<p class="host-answer-key">Answer: <b>${escapeHtml(correct)}</b> ${escapeHtml(correctText)}</p>` : '';
+    return `<form class="control-block host-form answer-form" data-command="${action}"><h2>${escapeHtml(title)}</h2>${answerNote}<div class="choice-grid">${question.options.map((option, index) => `<button class="answer-choice ${'ABCD'[index] === correct ? 'is-host-correct' : ''}" type="submit" name="answer" value="${'ABCD'[index]}" ${waitingForFinalExpert ? 'disabled' : ''}><b>${'ABCD'[index]}</b><span>${escapeHtml(option)}</span></button>`).join('')}</div></form>`;
+  }
+
+  const percent = (value) => `${Math.round((value || 0) * 100)}%`;
+
+  function awardsHostBlock(state) {
+    const show = state.awards_show;
+    if (!show) {
+      return `<div class="control-block awards-block"><h2>Awards show</h2><p class="control-note">${state.awards.length} award${state.awards.length === 1 ? '' : 's'} ready. Reveal them one by one on the TV, building up to the best player.</p><button class="button ${state.phase === 'GAME_WON' ? 'button-lime' : 'button-muted'} awards-control" type="button" data-action="awards_start" ${state.awards.length ? '' : 'disabled'}>Start awards show <span aria-hidden="true">★</span></button></div>`;
+    }
+    const nextLabel = show.step === 0 ? 'Announce first award' : !show.revealed ? 'Reveal the winner' : show.finished ? 'That’s all the awards' : 'Announce next award';
+    const runningOrder = state.awards.map((award, index) => {
+      const position = index + 1;
+      const status = position < show.number || (position === show.number && show.revealed) ? 'done' : position === show.number ? 'current' : '';
+      return `<li class="${status}"><b>${position}. ${escapeHtml(award.title)}</b><span>${award.winners.map(escapeHtml).join(' &amp; ')} · ${escapeHtml(award.stat)}</span></li>`;
+    }).join('');
+    return `<div class="control-block awards-block"><h2>${show.number ? `Award ${show.number} of ${show.total}` : 'Awards intro on TV'}</h2>${show.award ? `<p class="control-note">${escapeHtml(show.award.title)} · ${show.revealed ? 'winner revealed' : 'winner hidden'}</p>` : ''}<button class="button button-lime awards-control" type="button" data-action="awards_next" ${show.finished ? 'disabled' : ''}>${nextLabel} <span aria-hidden="true">→</span></button><div class="awards-secondary"><button class="button button-muted" type="button" data-action="awards_back" ${show.step === 0 ? 'disabled' : ''}>Back</button><button class="button button-muted" type="button" data-action="awards_end">End awards show</button></div><ol class="award-order">${runningOrder}</ol></div>`;
+  }
+
+  function renderAwardsStage(show) {
+    if (!show.award) {
+      return `<p class="awards-kicker">IT’S TIME FOR</p><h1 class="awards-heading">THE <b>AWARDS</b></h1><p class="awards-sub">${show.total} award${show.total === 1 ? '' : 's'} tonight</p>`;
+    }
+    const award = show.award;
+    const winner = show.revealed
+      ? `<p class="awards-winner">${award.winners.map(escapeHtml).join(' &amp; ')}</p><p class="awards-stat">${escapeHtml(award.stat)}</p>`
+      : '<p class="awards-drumroll">And the winner is…</p>';
+    return `<p class="awards-kicker">AWARD ${show.number} OF ${show.total}</p><h1 class="awards-heading">${escapeHtml(award.title)}</h1><p class="awards-sub">${escapeHtml(award.description)}</p>${winner}`;
   }
 
   const findPowerup = (state, id) => (state.powerups || []).find((powerup) => powerup.id === id);
@@ -103,11 +140,11 @@
     } else if (phase === 'SHUTDOWN_SELECT') {
       controls.innerHTML = selectForm('Choose one expert to shut down', 'expert_id', activeExperts.map((expert) => ({ value: expert.id, label: `${expert.name} · ${expert.category}` })), 'choose_shutdown', 'Continue to spin', 'No eligible experts to shut down.');
     } else if (phase === 'SPINNING') {
-      controls.innerHTML = `<div class="control-block host-form"><h2>Chair spinning</h2><button class="button button-muted" type="button" data-action="spin">Play spin jingle <span aria-hidden="true">♫</span></button></div>${selectForm('Where did they land?', 'expert_id', experts.map((expert) => ({ value: expert.id, label: `${expert.name} · ${expert.category}${expert.locked ? ' · LOCKED' : ''}` })), 'resolve_landing', 'Confirm landing', 'No experts configured.')}`;
+      controls.innerHTML = `${selectForm('Where did they land?', 'expert_id', experts.map((expert) => ({ value: expert.id, label: `${expert.name} · ${expert.category}${expert.locked ? ' · LOCKED' : ''}` })), 'resolve_landing', 'Confirm landing', 'No experts configured.')}`;
     } else if (phase === 'LANDED') {
       controls.innerHTML = `<div class="control-block"><h2>Landed on ${escapeHtml(state.current_expert_name)}</h2><p class="control-note">Keep this expert, or use the player's one Re-spin. Shut-downs stay the same.</p><button class="button button-lime" type="button" data-action="confirm_landing">Show question <span aria-hidden="true">→</span></button>${powerupButton(state, 'respin')}</div>`;
     } else if (phase === 'QUESTION') {
-      controls.innerHTML = `<div class="control-block"><h2>Expert answers</h2><p class="control-note">${state.expert_answer_count} of ${state.expert_answer_total} submitted. Answers stay private until the reveal.</p></div>${powerupControls(state, experts)}${answerForm('Enter the player’s answer', 'reveal_answer')}`;
+      controls.innerHTML = `<div class="control-block"><h2>Expert answers</h2><p class="control-note">${state.expert_answer_count} of ${state.expert_answer_total} submitted. Players off the chair: ${state.player_guess_count} of ${state.player_guess_total} in. Answers stay private until the reveal.</p></div>${powerupControls(state, experts)}${answerForm('Enter the player’s answer', 'reveal_answer')}`;
     } else if (phase === 'ANSWER_REVEAL') {
       const resultName = state.last_result?.type === 'final_correct' ? 'BIRTHDAY ANSWER CORRECT' : state.last_result?.type === 'correct' ? 'PLAYER CORRECT' : state.last_result?.type === 'final_incorrect' ? 'FINAL ANSWER WRONG' : 'PLAYER WRONG · RUN RESET';
       const advanceLabel = state.pending_final_question ? state.last_result?.type === 'final_correct' ? 'Next Birthday question' : state.final_questions_required ? 'Continue' : 'Go to expert choice' : state.last_result?.type === 'correct' ? 'Choose next category' : 'Select next player';
@@ -117,10 +154,12 @@
     } else if (phase === 'FINAL_QUESTION') {
       controls.innerHTML = `<div class="control-block"><h2>Birthday question ${state.final_questions_answered + 1} of ${state.final_questions_required}</h2><p class="control-note">${escapeHtml(state.final_expert_name)} must submit an answer before the player locks in.</p></div>${answerForm('Enter the player’s answer', 'reveal_final_answer')}`;
     } else if (phase === 'GAME_WON') {
-      controls.innerHTML = `<div class="control-block"><h2>Birthday presents unlocked.</h2><button class="button button-coral" type="button" data-action="reset">Reset game</button></div>`;
+      controls.innerHTML = `<div class="control-block"><h2>Birthday presents unlocked.</h2><p class="control-note">Time to hand out the awards.</p><button class="button button-coral" type="button" data-action="reset">Reset game</button></div>`;
     }
 
-    byId('player-roster').innerHTML = state.players.length ? state.players.map((player) => `<li>${escapeHtml(player.name)}<small>${player.correct_answers} / ${player.questions_answered}</small></li>`).join('') : '<li class="empty-row">No players yet</li>';
+    controls.insertAdjacentHTML('beforeend', awardsHostBlock(state));
+
+    byId('player-roster').innerHTML = state.players.length ? state.players.map((player) => `<li>${escapeHtml(player.name)}<small>${player.correct_answers} / ${player.questions_answered} · ${percent(player.accuracy)} · chair ${player.chair_correct} / ${player.chair_answered}</small></li>`).join('') : '<li class="empty-row">No players yet</li>';
     byId('expert-roster').innerHTML = experts.map((expert) => {
       const score = expert.questions_answered ? `${expert.correct_answers} / ${expert.questions_answered}` : 'No answers yet';
       const details = expert.joined ? `${expert.category} · ${score} · ${Math.round(expert.accuracy * 100)}%` : `${expert.category} · ${score} · ${Math.round(expert.accuracy * 100)}% · Not joined`;
@@ -129,6 +168,11 @@
     }).join('') || '<li class="empty-row">No experts configured</li>';
     byId('room-count').textContent = String(state.players.length + experts.filter((expert) => expert.joined).length);
     if (phase !== 'GAME_WON') controls.insertAdjacentHTML('beforeend', '<button class="button button-muted reset-control" type="button" data-action="reset">Reset game</button>');
+  }
+
+  function scoreLine(card) {
+    if (!card) return '';
+    return `<p class="my-score">Your score: <b>${card.correct_answers} / ${card.questions_answered}</b> · ${percent(card.accuracy)}</p>`;
   }
 
   function renderParticipant(state) {
@@ -143,7 +187,7 @@
       const isLocked = expert?.locked;
       if (state.phase === 'QUESTION' && state.current_question) {
         if (expert?.answered) {
-          content.innerHTML = '<div class="answered-banner">ANSWER LOCKED ✓</div><p class="waiting-copy">Your answer is in. Stay tuned for the reveal.</p>';
+          content.innerHTML = `<div class="answered-banner">ANSWER LOCKED ✓</div><p class="waiting-copy">Your answer is in. Stay tuned for the reveal.</p>${scoreLine(expert)}`;
           return;
         }
         content.innerHTML = `<h2>${escapeHtml(state.current_question.text)}</h2><div class="answer-grid">${state.current_question.options.map((option, index) => `<button class="phone-answer" type="button" data-answer="${'ABCD'[index]}"><b>${'ABCD'[index]}</b><span>${escapeHtml(option)}</span></button>`).join('')}</div>`;
@@ -158,21 +202,37 @@
         return;
       }
       const status = isLocked ? 'LOCKED FOR THIS SPIN' : state.phase === 'ANSWER_REVEAL' ? 'REVEAL TIME' : state.phase === 'GAME_WON' ? 'GAME WON' : 'ACTIVE';
-      content.innerHTML = `<div class="status-line"><span class="status-orb ${isLocked ? 'locked' : 'active'}"></span><strong>${status}</strong></div><p class="waiting-copy">${state.phase === 'ANSWER_REVEAL' ? 'The answer and expert results are on the screen.' : 'Your phone will show the question when it is time to answer.'}</p>`;
+      content.innerHTML = `<div class="status-line"><span class="status-orb ${isLocked ? 'locked' : 'active'}"></span><strong>${status}</strong></div><p class="waiting-copy">${state.phase === 'ANSWER_REVEAL' ? 'The answer and expert results are on the screen.' : 'Your phone will show the question when it is time to answer.'}</p>${scoreLine(expert)}`;
       return;
     }
 
+    const me = state.players.find((player) => player.id === document.body.dataset.id);
     const isUp = state.current_player_id === document.body.dataset.id;
-    if (state.phase === 'GAME_WON') {
-      content.innerHTML = '<div class="status-line"><span class="status-orb active"></span><strong>GAME WON</strong></div><p class="waiting-copy">The birthday girl gets her presents!</p>';
-    } else if (!isUp && state.phase === 'QUESTION' && state.audience?.status === 'open') {
-      content.innerHTML = state.audience_voted
-        ? '<div class="answered-banner">VOTE LOCKED ✓</div><p class="waiting-copy">Results will appear on the TV.</p>'
-        : `<h2>Ask the Players</h2><p class="waiting-copy">Read the question on the TV, then vote.</p><div class="answer-grid vote-grid">${'ABCD'.split('').map((letter) => `<button class="phone-answer" type="button" data-vote="${letter}"><b>${letter}</b></button>`).join('')}</div>`;
+    const question = state.current_question;
+    const answering = !isUp && question && (state.phase === 'QUESTION' || state.phase === 'FINAL_QUESTION');
+    const revealing = !isUp && question && (state.phase === 'ANSWER_REVEAL' || state.phase === 'GAME_WON');
+    const audienceOpen = state.phase === 'QUESTION' && state.audience?.status === 'open';
+    if (answering) {
+      const askBanner = audienceOpen ? '<p class="ask-banner">ASK THE PLAYERS · your answer counts in the vote</p>' : '';
+      if (state.my_guess) {
+        content.innerHTML = `${askBanner}<div class="answered-banner">LOCKED IN: ${escapeHtml(state.my_guess)} ✓</div><p class="waiting-copy">Wait for the reveal on the TV.</p>${scoreLine(me)}`;
+      } else {
+        const removed = state.fifty_fifty_removed || [];
+        content.innerHTML = `${askBanner}<p class="eyebrow">PLAY ALONG · ${escapeHtml(question.category)}</p><h2>${escapeHtml(question.text)}</h2><div class="answer-grid">${question.options.map((option, index) => {
+          const letter = 'ABCD'[index];
+          return `<button class="phone-answer" type="button" data-guess="${letter}" ${removed.includes(letter) ? 'disabled' : ''}><b>${letter}</b><span>${escapeHtml(option)}</span></button>`;
+        }).join('')}</div>${scoreLine(me)}`;
+      }
+    } else if (revealing) {
+      const correctText = question.correct ? `${question.correct}: ${question.options['ABCD'.indexOf(question.correct)]}` : '';
+      const verdict = !state.my_guess ? 'NO ANSWER' : state.my_guess === question.correct ? 'YOU GOT IT ✓' : `NOPE · YOU SAID ${state.my_guess}`;
+      content.innerHTML = `<div class="answered-banner ${state.my_guess && state.my_guess !== question.correct ? 'is-wrong' : ''}">${escapeHtml(verdict)}</div><p class="waiting-copy">Correct answer: ${escapeHtml(correctText)}</p>${scoreLine(me)}`;
+    } else if (state.phase === 'GAME_WON') {
+      content.innerHTML = `<div class="status-line"><span class="status-orb active"></span><strong>GAME WON</strong></div><p class="waiting-copy">The birthday girl gets her presents!</p>${scoreLine(me)}`;
     } else if (isUp) {
-      content.innerHTML = '<div class="youre-up">YOU’RE UP!</div><p class="waiting-copy">Head to the chair. The host will guide your turn.</p>';
+      content.innerHTML = `<div class="youre-up">YOU’RE UP!</div><p class="waiting-copy">Head to the chair. The host will guide your turn.</p>${scoreLine(me)}`;
     } else {
-      content.innerHTML = `<div class="status-line"><span class="status-orb"></span><strong>${state.phase === 'LOBBY' ? 'READY' : 'WAITING'}</strong></div><p class="waiting-copy">${state.phase === 'LOBBY' ? 'You’re in. The host will start when everyone is ready.' : 'The host will let you know when it’s your turn.'}</p>`;
+      content.innerHTML = `<div class="status-line"><span class="status-orb"></span><strong>${state.phase === 'LOBBY' ? 'READY' : 'WAITING'}</strong></div><p class="waiting-copy">${state.phase === 'LOBBY' ? 'You’re in. The host will start when everyone is ready.' : 'Questions will pop up here so you can play along.'}</p>${state.phase === 'LOBBY' ? '' : scoreLine(me)}`;
     }
   }
 
@@ -188,7 +248,7 @@
     const activePlayer = state.players.find((player) => player.id === state.current_player_id);
     const activePlayerPhoto = byId('active-player-photo');
     activePlayerPhoto.hidden = !activePlayer?.avatar_url;
-    activePlayerPhoto.src = activePlayer?.avatar_url || '';
+    if (activePlayerPhoto.getAttribute('src') !== (activePlayer?.avatar_url || '')) activePlayerPhoto.src = activePlayer?.avatar_url || '';
     activePlayerPhoto.alt = activePlayer?.avatar_url ? `${activePlayer.name}'s photo` : '';
     byId('display-subtext').hidden = Boolean(question);
     if (phase === 'FINAL_EXPERT_SELECT') byId('display-subtext').textContent = state.final_expert_options.map((option) => `${option.label}: ${option.expert_name} · ${Math.round(option.accuracy * 100)}% · ${option.questions_required}/${option.questions_required} needed`).join('   |   ');
@@ -208,16 +268,33 @@
     byId('display-result').textContent = revealed ? resultLabel : '';
     byId('category-list').innerHTML = state.categories.map((category) => `<div class="category-item ${category.cleared ? 'cleared' : ''} ${category.name === state.current_category ? 'current' : ''}"><span>${escapeHtml(category.name)}</span><i></i></div>`).join('');
     byId('progress-count').textContent = `${state.categories.filter((category) => category.cleared).length} / ${state.categories.length}`;
-    byId('player-count').textContent = String(state.players.length);
-    byId('display-players').innerHTML = state.players.length ? state.players.map((player) => {
+    byId('player-count').textContent = phase === 'QUESTION' || phase === 'FINAL_QUESTION' ? `${state.player_guess_count} / ${state.player_guess_total} in` : String(state.players.length);
+    setHtmlIfChanged(byId('display-players'), state.players.length ? state.players.map((player) => {
       const isActive = player.id === state.current_player_id;
       const portrait = player.avatar_url
         ? `<img class="player-photo" src="${escapeHtml(player.avatar_url)}" alt="">`
         : `<span class="player-photo-fallback" aria-hidden="true">${escapeHtml(player.name.charAt(0).toUpperCase())}</span>`;
-      return `<li class="player-item ${isActive ? 'active' : ''}"><span class="player-identity">${portrait}<span>${escapeHtml(player.name)}</span></span>${isActive ? '<span class="roster-status">IN CHAIR</span>' : ''}</li>`;
-    }).join('') : '<li class="empty-roster">No players yet</li>';
-    byId('display-experts').innerHTML = state.experts.map((expert) => `<li class="expert-item ${expert.locked ? 'locked' : ''} ${expert.selected || expert.id === state.final_expert_id ? 'selected' : ''} ${expert.category === state.current_category ? 'specialist' : ''}"><span class="expert-identity">${expert.avatar_url ? `<img class="expert-photo" src="${escapeHtml(expert.avatar_url)}" alt="">` : ''}<span>${escapeHtml(expert.name)}</span></span><span class="expert-answer">${phase === 'FINAL_EXPERT_SELECT' || phase === 'FINAL_QUESTION' ? `${Math.round(expert.accuracy * 100)}%` : revealed ? escapeHtml(state.expert_answers[expert.id] || '—') : expert.answered ? 'IN' : ''}</span></li>`).join('');
+      const badge = isActive ? '<span class="roster-status">IN CHAIR</span>' : player.guessed && (phase === 'QUESTION' || phase === 'FINAL_QUESTION') ? '<span class="roster-status">IN</span>' : player.questions_answered ? `<span class="player-score">${percent(player.accuracy)}</span>` : '';
+      return `<li class="player-item ${isActive ? 'active' : ''}"><span class="player-identity">${portrait}<span>${escapeHtml(player.name)}</span></span>${badge}</li>`;
+    }).join('') : '<li class="empty-roster">No players yet</li>');
+    setHtmlIfChanged(byId('display-experts'), state.experts.map((expert) => `<li class="expert-item ${expert.locked ? 'locked' : ''} ${expert.selected || expert.id === state.final_expert_id ? 'selected' : ''} ${expert.category === state.current_category ? 'specialist' : ''}"><span class="expert-identity">${expert.avatar_url ? `<img class="expert-photo" src="${escapeHtml(expert.avatar_url)}" alt="">` : ''}<span>${escapeHtml(expert.name)}</span></span><span class="expert-answer">${phase === 'FINAL_EXPERT_SELECT' || phase === 'FINAL_QUESTION' ? `${Math.round(expert.accuracy * 100)}%` : revealed ? escapeHtml(state.expert_answers[expert.id] || '—') : expert.answered ? 'IN' : ''}</span></li>`).join(''));
     renderShareLink(phase);
+    const awardsOverlay = byId('awards-overlay');
+    const show = state.awards_show;
+    awardsOverlay.hidden = !show;
+    if (show) {
+      const stage = byId('awards-stage');
+      const html = renderAwardsStage(show);
+      if (stage.dataset.step !== String(show.step)) {
+        stage.innerHTML = html;
+        stage.dataset.step = String(show.step);
+        stage.classList.remove('animate');
+        void stage.offsetWidth;
+        stage.classList.add('animate');
+      }
+    } else {
+      byId('awards-stage').dataset.step = '';
+    }
     if (phase === 'CATEGORY_SELECT' && previousPhase === 'PLAYER_SELECT') animatePlayerSelection(state);
     else if (phase !== 'CATEGORY_SELECT') hidePlayerReveal();
     previousPhase = phase;
@@ -327,13 +404,13 @@
       if (action.dataset.confirm && !window.confirm(action.dataset.confirm)) return;
       command(action.dataset.action, action.dataset.powerup ? { powerup: action.dataset.powerup } : {});
     }
-    const vote = event.target.closest('[data-vote]');
-    if (vote && socket) {
-      vote.disabled = true;
-      socket.emit('submit_vote', { answer: vote.dataset.vote }, (result) => {
+    const guess = event.target.closest('[data-guess]');
+    if (guess && socket) {
+      guess.disabled = true;
+      socket.emit('submit_guess', { answer: guess.dataset.guess }, (result) => {
         if (!result?.ok) {
-          vote.disabled = false;
-          showToast('participant-toast', result?.error || 'The vote could not be submitted.');
+          guess.disabled = false;
+          showToast('participant-toast', result?.error || 'The answer could not be submitted.');
         }
       });
     }
@@ -368,29 +445,6 @@
     socket.on('share_link', (state) => {
       shareLinkState = state;
       renderShareLink();
-    });
-    socket.on('cue', ({ name }) => {
-      const audio = byId('game-audio');
-      if (!audio || !audioEnabled) return;
-      const filenames = {
-        player_select: 'player-select.mp3', spin: 'spin-start.mp3', spin_stop: 'spin-stop.mp3',
-        question: 'question-reveal.mp3', correct: 'correct.mp3', incorrect: 'incorrect.mp3',
-        final_reveal: 'final-reveal.mp3', victory: 'victory.mp3', powerup: 'powerup.mp3'
-      };
-      if (!filenames[name]) return;
-      audio.src = `/static/audio/${filenames[name]}`;
-      audio.play().catch(() => {});
-    });
-  }
-
-  const audioToggle = byId('audio-toggle');
-  if (audioToggle) {
-    audioToggle.addEventListener('click', () => {
-      audioEnabled = !audioEnabled;
-      audioToggle.setAttribute('aria-pressed', String(audioEnabled));
-      audioToggle.setAttribute('aria-label', audioEnabled ? 'Disable TV audio' : 'Enable TV audio');
-      audioToggle.title = audioEnabled ? 'Disable TV audio' : 'Enable TV audio';
-      audioToggle.querySelector('span').textContent = audioEnabled ? 'Sound on' : 'Sound off';
     });
   }
 })();

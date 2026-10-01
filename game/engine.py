@@ -1,7 +1,7 @@
 import random
 from collections import defaultdict
 
-from game.models import Expert, GamePhase, Player, Question
+from game.models import Expert, GamePhase, Player, Question, Scorecard
 
 
 POWERUPS = {
@@ -48,10 +48,7 @@ class GameEngine:
 
         self._rng = rng or random.Random()
         self.players: dict[str, Player] = {}
-        self.expert_stats = {
-            expert_id: {"questions_answered": 0, "correct_answers": 0}
-            for expert_id in self.experts
-        }
+        self.expert_scores = {expert_id: Scorecard() for expert_id in self.experts}
         self.phase = GamePhase.LOBBY
         self.cleared_categories: set[str] = set()
         self.locked_expert_ids: set[str] = set()
@@ -73,7 +70,9 @@ class GameEngine:
         self.fifty_fifty_removed: list[str] = []
         self.peek_expert_id: str | None = None
         self.audience_status: str | None = None
-        self.audience_votes: dict[str, str] = {}
+        self.audience_counts: dict[str, int] | None = None
+        self.player_guesses: dict[str, str] = {}
+        self.awards_step: int | None = None
 
     def add_player(self, player: Player) -> None:
         if player.id in self.players:
@@ -170,28 +169,47 @@ class GameEngine:
             raise GameError("There are no other players to ask.")
         self._use_powerup("ask_players")
         self.audience_status = "open"
-        self.audience_votes.clear()
+        self.audience_counts = None
 
-    def submit_audience_vote(self, player_id: str, answer: str) -> None:
-        self._require_phase(GamePhase.QUESTION)
-        if self.audience_status != "open":
-            raise GameError("There is no vote open.")
+    def submit_guess(self, player_id: str, answer: str) -> None:
+        """Players off the chair answer every question for their own score; Ask the Players tallies these."""
+        if self.phase not in {GamePhase.QUESTION, GamePhase.FINAL_QUESTION}:
+            raise GameError("There is no question to answer right now.")
         if player_id not in self.players:
-            raise GameError("Only joined players can vote.")
+            raise GameError("Only joined players can answer.")
         if player_id == self.current_player_id:
-            raise GameError("The player in the chair cannot vote.")
+            raise GameError("The player in the chair answers out loud.")
         normalized = answer.upper()
         if normalized not in {"A", "B", "C", "D"}:
             raise GameError("Answers must be A, B, C, or D.")
-        if player_id in self.audience_votes:
-            raise GameError("Your vote is already locked.")
-        self.audience_votes[player_id] = normalized
+        if player_id in self.player_guesses:
+            raise GameError("Your answer is already locked.")
+        self.player_guesses[player_id] = normalized
 
     def close_audience_vote(self) -> None:
         self._require_phase(GamePhase.QUESTION)
         if self.audience_status != "open":
             raise GameError("There is no vote open.")
-        self.audience_status = "closed"
+        self._close_audience_vote()
+
+    def start_awards(self) -> None:
+        self.awards_step = 0
+
+    def next_award(self) -> None:
+        """Each award takes two steps: announce the title, then reveal the winner."""
+        if self.awards_step is None:
+            raise GameError("Start the awards show first.")
+        if self.awards_step >= 2 * len(self.awards()):
+            raise GameError("That was the last award.")
+        self.awards_step += 1
+
+    def previous_award(self) -> None:
+        if self.awards_step is None:
+            raise GameError("Start the awards show first.")
+        self.awards_step = max(0, self.awards_step - 1)
+
+    def end_awards(self) -> None:
+        self.awards_step = None
 
     def submit_expert_answer(self, expert_id: str, answer: str) -> None:
         if self.phase is GamePhase.FINAL_QUESTION:
@@ -214,16 +232,15 @@ class GameEngine:
             raise GameError("Answers must be A, B, C, or D.")
         self.player_answer = normalized
         if self.audience_status == "open":
-            self.audience_status = "closed"
+            self._close_audience_vote()
         self.phase = GamePhase.ANSWER_REVEAL
         question = self.current_question
         assert question is not None
         self._record_expert_results(question)
         player = self._current_player()
-        player.questions_answered += 1
         player_won = normalized == question.correct
+        self._record_player_answers(question, player, player_won)
         if player_won:
-            player.correct_answers += 1
             self.cleared_categories.add(question.category)
             self.last_result = {"type": "correct", "player_id": player.id}
             self._pending_final_question = self.cleared_categories == set(self.categories)
@@ -240,6 +257,7 @@ class GameEngine:
             if self.final_expert_id:
                 self.current_question = self._draw_question("Birthday")
                 self.expert_answers.clear()
+                self.player_guesses.clear()
                 self.player_answer = None
                 self._pending_final_question = False
                 self.phase = GamePhase.FINAL_QUESTION
@@ -268,11 +286,10 @@ class GameEngine:
         question = self.current_question
         assert question is not None
         player = self._current_player()
-        player.questions_answered += 1
+        self._record_player_answers(question, player, normalized == question.correct)
         self.final_questions_answered += 1
         self.player_answer = normalized
         if normalized == question.correct:
-            player.correct_answers += 1
             self.final_correct_answers += 1
             if self.final_correct_answers == self.final_questions_required:
                 self.last_result = {"type": "game_won", "player_id": player.id}
@@ -313,6 +330,7 @@ class GameEngine:
         self.questions_by_category["Birthday"] = self._all_questions_by_category("Birthday")
         self.current_question = self._draw_question("Birthday")
         self.expert_answers.clear()
+        self.player_guesses.clear()
         self.player_answer = None
         self.phase = GamePhase.FINAL_QUESTION
 
@@ -339,13 +357,13 @@ class GameEngine:
         self.questions_by_category = defaultdict(list)
         for question in self._all_questions:
             self.questions_by_category[question.category].append(question)
+        self.awards_step = None
         for player in self.players.values():
-            player.questions_answered = 0
-            player.correct_answers = 0
+            player.score = Scorecard()
+            player.chair_answered = 0
+            player.chair_correct = 0
             player.used_powerups.clear()
-        for stats in self.expert_stats.values():
-            stats["questions_answered"] = 0
-            stats["correct_answers"] = 0
+        self.expert_scores = {expert_id: Scorecard() for expert_id in self.experts}
 
     def snapshot(self, reveal_expert_answers: bool = False) -> dict[str, object]:
         question = self.current_question
@@ -379,6 +397,10 @@ class GameEngine:
                     "correct_answers": player.correct_answers,
                     "incorrect_answers": player.incorrect_answers,
                     "accuracy": player.accuracy,
+                    "chair_answered": player.chair_answered,
+                    "chair_correct": player.chair_correct,
+                    "best_streak": player.score.best_streak,
+                    "guessed": player.id in self.player_guesses,
                 }
                 for player in self.players.values()
             ],
@@ -387,18 +409,11 @@ class GameEngine:
                     "id": expert.id,
                     "name": expert.name,
                     "category": expert.category,
-                    "questions_answered": self.expert_stats[expert.id]["questions_answered"],
-                    "correct_answers": self.expert_stats[expert.id]["correct_answers"],
-                    "incorrect_answers": (
-                        self.expert_stats[expert.id]["questions_answered"]
-                        - self.expert_stats[expert.id]["correct_answers"]
-                    ),
-                    "accuracy": (
-                        self.expert_stats[expert.id]["correct_answers"]
-                        / self.expert_stats[expert.id]["questions_answered"]
-                        if self.expert_stats[expert.id]["questions_answered"]
-                        else 0.0
-                    ),
+                    "questions_answered": self.expert_scores[expert.id].answered,
+                    "correct_answers": self.expert_scores[expert.id].correct,
+                    "incorrect_answers": self.expert_scores[expert.id].answered - self.expert_scores[expert.id].correct,
+                    "accuracy": self.expert_scores[expert.id].accuracy,
+                    "best_streak": self.expert_scores[expert.id].best_streak,
                     "locked": expert.id in self.locked_expert_ids,
                     "selected": expert.id == self.current_expert_id,
                     "turn_shutdown": expert.id == self.turn_shutdown_expert_id,
@@ -440,6 +455,8 @@ class GameEngine:
             ),
             "expert_answer_count": len(self.expert_answers),
             "expert_answer_total": len(self.experts),
+            "player_guess_count": len(self.player_guesses),
+            "player_guess_total": len(self._audience_voter_ids()),
             "expert_answers": dict(self.expert_answers)
             if reveal_expert_answers or self.phase in {GamePhase.ANSWER_REVEAL, GamePhase.GAME_WON}
             else {},
@@ -469,18 +486,151 @@ class GameEngine:
             "audience": (
                 {
                     "status": self.audience_status,
-                    "vote_count": len(self.audience_votes),
+                    "vote_count": len(self.player_guesses),
                     "voter_total": len(self._audience_voter_ids()),
-                    "counts": (
-                        {letter: list(self.audience_votes.values()).count(letter) for letter in "ABCD"}
-                        if self.audience_status == "closed"
-                        else None
-                    ),
+                    "counts": dict(self.audience_counts) if self.audience_status == "closed" and self.audience_counts else None,
                 }
                 if self.audience_status
                 else None
             ),
+            "awards_show": self._awards_show(),
         }
+
+    def _awards_show(self) -> dict[str, object] | None:
+        if self.awards_step is None:
+            return None
+        awards = self.awards()
+        step = min(self.awards_step, 2 * len(awards))
+        index = (step + 1) // 2
+        revealed = step > 0 and step % 2 == 0
+        award = awards[index - 1] if index else None
+        return {
+            "step": step,
+            "number": index,
+            "total": len(awards),
+            "revealed": revealed,
+            "finished": step == 2 * len(awards),
+            "award": (
+                {
+                    "title": award["title"],
+                    "description": award["description"],
+                    "winners": award["winners"] if revealed else None,
+                    "stat": award["stat"] if revealed else None,
+                }
+                if award
+                else None
+            ),
+        }
+
+    def awards(self) -> list[dict[str, object]]:
+        results: list[dict[str, object]] = []
+
+        def give(title: str, description: str, entries: list[tuple[str, tuple, str]]) -> None:
+            # Highest rank wins; equal ranks share the award.
+            if not entries:
+                return
+            top = max(rank for _, rank, _ in entries)
+            winners = [entry for entry in entries if entry[1] == top]
+            results.append(
+                {
+                    "title": title,
+                    "description": description,
+                    "winners": [name for name, _, _ in winners],
+                    "stat": winners[0][2],
+                }
+            )
+
+        def stat(correct: int, answered: int) -> str:
+            return f"{round(100 * correct / answered)}% ({correct}/{answered})"
+
+        scored_players = [player for player in self.players.values() if player.score.answered]
+        scored_experts = [(expert, self.expert_scores[expert.id]) for expert in self.experts.values()]
+        scored_experts = [(expert, card) for expert, card in scored_experts if card.answered]
+
+        # Ceremony order: least important first, overall best player last.
+        for category in [*self.categories, "Birthday"]:
+            expert_entries = []
+            for e, c in scored_experts:
+                answered, correct = c.by_category.get(category, [0, 0])
+                if answered:
+                    expert_entries.append((e.name, (correct / answered, correct), stat(correct, answered)))
+            give(f"{category} Guru", f"Best expert at {category}", expert_entries)
+            player_entries = []
+            for p in scored_players:
+                answered, correct = p.score.by_category.get(category, [0, 0])
+                if answered:
+                    player_entries.append((p.name, (correct / answered, correct), stat(correct, answered)))
+            give(f"{category} Champion", f"Best player at {category}", player_entries)
+
+        own_category = []
+        other_categories = []
+        for expert, card in scored_experts:
+            own_answered, own_correct = card.by_category.get(expert.category, [0, 0])
+            if own_answered and own_correct < own_answered:
+                own_category.append(
+                    (expert.name, (-own_correct / own_answered, own_answered), f"{stat(own_correct, own_answered)} at {expert.category}")
+                )
+            other_answered = card.answered - own_answered
+            other_correct = card.correct - own_correct
+            if other_correct:
+                other_categories.append(
+                    (expert.name, (other_correct / other_answered, other_correct), f"{stat(other_correct, other_answered)} outside {expert.category}")
+                )
+        give("Questionable Credentials", "Worst expert in their own specialist category", own_category)
+        give("Secret Polymath", "Best expert outside their own category", other_categories)
+
+        couch = []
+        for p in scored_players:
+            sofa_answered = p.questions_answered - p.chair_answered
+            if not p.chair_answered or not sofa_answered:
+                continue
+            sofa_accuracy = (p.correct_answers - p.chair_correct) / sofa_answered
+            gap = sofa_accuracy - p.chair_correct / p.chair_answered
+            if gap > 0:
+                couch.append(
+                    (p.name, (gap,), f"{round(100 * sofa_accuracy)}% on the sofa, {round(100 * p.chair_correct / p.chair_answered)}% in the chair")
+                )
+        give("Couch Genius", "Brilliant from the sofa, less so in the chair", couch)
+        give(
+            "Hot Seat Hero",
+            "Best player in the chair",
+            [
+                (p.name, (p.chair_correct / p.chair_answered, p.chair_correct), stat(p.chair_correct, p.chair_answered))
+                for p in scored_players
+                if p.chair_correct
+            ],
+        )
+        streaks = [(p.name, p.score.best_streak) for p in scored_players]
+        streaks += [(e.name, c.best_streak) for e, c in scored_experts]
+        give(
+            "On Fire",
+            "Longest run of correct answers",
+            [(name, (best,), f"{best} in a row") for name, best in streaks if best >= 2],
+        )
+
+        if len(scored_experts) > 1:
+            give(
+                "Self-Proclaimed Expert",
+                "Worst expert overall",
+                [(e.name, (-c.accuracy, c.answered), stat(c.correct, c.answered)) for e, c in scored_experts],
+            )
+        if len(scored_players) > 1:
+            give(
+                "Wooden Spoon",
+                "Worst player overall",
+                [(p.name, (-p.accuracy, p.questions_answered), stat(p.correct_answers, p.questions_answered)) for p in scored_players],
+            )
+        give(
+            "The Expert's Expert",
+            "Best expert overall",
+            [(e.name, (c.accuracy, c.correct), stat(c.correct, c.answered)) for e, c in scored_experts],
+        )
+        give(
+            "Brain of the Party",
+            "Best player overall",
+            [(p.name, (p.accuracy, p.correct_answers), stat(p.correct_answers, p.questions_answered)) for p in scored_players],
+        )
+        return results
 
     def _show_question(self) -> None:
         self.locked_expert_ids.clear()
@@ -514,7 +664,12 @@ class GameEngine:
         self.fifty_fifty_removed = []
         self.peek_expert_id = None
         self.audience_status = None
-        self.audience_votes.clear()
+        self.audience_counts = None
+        self.player_guesses.clear()
+
+    def _close_audience_vote(self) -> None:
+        self.audience_status = "closed"
+        self.audience_counts = {letter: list(self.player_guesses.values()).count(letter) for letter in "ABCD"}
 
     def _draw_question(self, category: str) -> Question:
         pool = self.questions_by_category[category]
@@ -528,19 +683,21 @@ class GameEngine:
 
     def _record_expert_results(self, question: Question) -> None:
         for expert_id, answer in self.expert_answers.items():
-            stats = self.expert_stats[expert_id]
-            stats["questions_answered"] += 1
-            if answer == question.correct:
-                stats["correct_answers"] += 1
+            self.expert_scores[expert_id].record(question.category, answer == question.correct)
         self.locked_expert_ids = {
             expert_id for expert_id, answer in self.expert_answers.items() if answer != question.correct
         }
 
+    def _record_player_answers(self, question: Question, chair_player: Player, chair_correct: bool) -> None:
+        chair_player.score.record(question.category, chair_correct)
+        chair_player.chair_answered += 1
+        if chair_correct:
+            chair_player.chair_correct += 1
+        for player_id, guess in self.player_guesses.items():
+            self.players[player_id].score.record(question.category, guess == question.correct)
+
     def _expert_accuracy(self, expert_id: str) -> float:
-        stats = self.expert_stats[expert_id]
-        if not stats["questions_answered"]:
-            return 0.0
-        return stats["correct_answers"] / stats["questions_answered"]
+        return self.expert_scores[expert_id].accuracy
 
     def _all_questions_by_category(self, category: str) -> list[Question]:
         return [question for question in self._all_questions if question.category == category]

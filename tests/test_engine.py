@@ -352,10 +352,10 @@ class GameEngineTests(unittest.TestCase):
         self.game.start_audience_vote()
 
         with self.assertRaises(GameError):
-            self.game.submit_audience_vote("player-1", "B")
-        self.game.submit_audience_vote("player-2", "b")
+            self.game.submit_guess("player-1", "B")
+        self.game.submit_guess("player-2", "b")
         with self.assertRaises(GameError):
-            self.game.submit_audience_vote("player-2", "C")
+            self.game.submit_guess("player-2", "C")
         self.assertIsNone(self.game.snapshot()["audience"]["counts"])
 
         self.game.close_audience_vote()
@@ -364,7 +364,99 @@ class GameEngineTests(unittest.TestCase):
         self.assertEqual(audience["counts"], {"A": 0, "B": 1, "C": 0, "D": 0})
         self.assertEqual(audience["voter_total"], 1)
         with self.assertRaises(GameError):
-            self.game.submit_audience_vote("player-2", "C")
+            self.game.submit_guess("player-2", "C")
+
+    def test_guesses_made_before_ask_the_players_count_in_the_vote(self) -> None:
+        self.start_question()
+        self.game.submit_guess("player-2", "D")
+        self.game.start_audience_vote()
+        self.game.close_audience_vote()
+
+        self.assertEqual(self.game.snapshot()["audience"]["counts"]["D"], 1)
+
+    def test_off_chair_guesses_and_chair_answers_are_scored(self) -> None:
+        self.start_question()
+        self.assertEqual(self.game.snapshot()["player_guess_total"], 1)
+        self.game.submit_guess("player-2", "B")
+        self.assertTrue(next(p for p in self.game.snapshot()["players"] if p["id"] == "player-2")["guessed"])
+        self.game.reveal_answer("A")
+        with self.assertRaises(GameError):
+            self.game.submit_guess("player-2", "B")
+
+        chair, sofa = self.game.players["player-1"], self.game.players["player-2"]
+        self.assertEqual((chair.questions_answered, chair.correct_answers, chair.chair_answered), (1, 0, 1))
+        self.assertEqual((sofa.questions_answered, sofa.correct_answers, sofa.chair_answered), (1, 1, 0))
+        self.assertEqual(sofa.score.by_category, {"Football": [1, 1]})
+
+        self.game.advance()
+        self.game.select_player("player-2")
+        self.game.choose_category("Music")
+        self.game.choose_shutdown("football")
+        self.game.resolve_landing("music")
+        self.game.confirm_landing()
+        self.assertEqual(self.game.player_guesses, {})
+        self.game.reveal_answer("C")
+        self.assertEqual((sofa.questions_answered, sofa.correct_answers, sofa.chair_correct), (2, 2, 1))
+        self.assertEqual(sofa.score.best_streak, 2)
+
+    def test_awards_name_best_worst_and_category_winners(self) -> None:
+        self.start_question()
+        self.game.submit_guess("player-2", "B")
+        self.game.submit_expert_answer("football", "B")
+        self.game.submit_expert_answer("music", "A")
+        self.game.reveal_answer("A")
+
+        awards = {award["title"]: award for award in self.game.awards()}
+
+        self.assertEqual(awards["Brain of the Party"]["winners"], ["Taylor"])
+        self.assertEqual(awards["Wooden Spoon"]["winners"], ["Jamie"])
+        self.assertEqual(awards["The Expert's Expert"]["winners"], ["Alex"])
+        self.assertEqual(awards["Self-Proclaimed Expert"]["winners"], ["Sarah"])
+        self.assertEqual(awards["Football Champion"]["stat"], "100% (1/1)")
+        self.assertEqual(awards["Football Guru"]["winners"], ["Alex"])
+        self.assertNotIn("Secret Polymath", awards)
+        self.assertNotIn("Hot Seat Hero", awards)
+        self.assertNotIn("Music Champion", awards)
+        titles = [award["title"] for award in self.game.awards()]
+        self.assertEqual(titles[-1], "Brain of the Party")
+        self.assertLess(titles.index("Football Guru"), titles.index("Wooden Spoon"))
+
+        self.game.reset()
+        self.assertEqual(self.game.awards(), [])
+
+    def test_awards_show_reveals_one_award_at_a_time(self) -> None:
+        self.start_question()
+        self.game.submit_guess("player-2", "B")
+        self.game.reveal_answer("A")
+        total = len(self.game.awards())
+
+        with self.assertRaises(GameError):
+            self.game.next_award()
+        self.game.start_awards()
+        show = self.game.snapshot()["awards_show"]
+        self.assertEqual((show["number"], show["total"], show["award"]), (0, total, None))
+
+        self.game.next_award()
+        show = self.game.snapshot()["awards_show"]
+        self.assertEqual(show["number"], 1)
+        self.assertFalse(show["revealed"])
+        self.assertIsNone(show["award"]["winners"])
+
+        self.game.next_award()
+        self.assertTrue(self.game.snapshot()["awards_show"]["revealed"])
+        self.game.previous_award()
+        self.assertFalse(self.game.snapshot()["awards_show"]["revealed"])
+
+        while not self.game.snapshot()["awards_show"]["finished"]:
+            self.game.next_award()
+        show = self.game.snapshot()["awards_show"]
+        self.assertEqual(show["award"]["title"], "Brain of the Party")
+        self.assertEqual(show["award"]["winners"], ["Taylor"])
+        with self.assertRaises(GameError):
+            self.game.next_award()
+
+        self.game.reset()
+        self.assertIsNone(self.game.snapshot()["awards_show"])
 
     def test_ask_the_players_needs_other_players(self) -> None:
         del self.game.players["player-2"]

@@ -50,21 +50,6 @@ Edit the CSV files before starting the server:
 
 Every configured category and `Birthday` need at least one question. Questions are drawn randomly without repeats until a category's pool is used up. The app reports invalid data at startup with the filename and row.
 
-## Optional Audio
-
-The TV can play these MP3 files when present. Audio is optional; the game works without it. Put your files in `static/audio/` with these exact names:
-
-| Filename | Cue |
-| --- | --- |
-| `player-select.mp3` | Random player reveal |
-| `spin-start.mp3` | Chair spin starts |
-| `spin-stop.mp3` | Chair lands on a shut-down expert |
-| `question-reveal.mp3` | A question is revealed |
-| `correct.mp3` | Player answer is correct |
-| `incorrect.mp3` | Player answer is incorrect |
-| `final-reveal.mp3` | Birthday question begins |
-| `victory.mp3` | Final answer wins |
-
 No wheel image is needed. The chair is the wheel, and the TV display is built from text and game state.
 
 ## Tests
