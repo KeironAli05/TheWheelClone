@@ -62,7 +62,12 @@
       const status = position < show.number || (position === show.number && show.revealed) ? 'done' : position === show.number ? 'current' : '';
       return `<li class="${status}"><b>${position}. ${escapeHtml(award.title)}</b><span>${award.winners.map(escapeHtml).join(' &amp; ')} · ${escapeHtml(award.stat)}</span></li>`;
     }).join('');
-    return `<div class="control-block awards-block"><h2>${show.number ? `Award ${show.number} of ${show.total}` : 'Awards intro on TV'}</h2>${show.award ? `<p class="control-note">${escapeHtml(show.award.title)} · ${show.revealed ? 'winner revealed' : 'winner hidden'}</p>` : ''}<button class="button button-lime awards-control" type="button" data-action="awards_next" ${show.finished ? 'disabled' : ''}>${nextLabel} <span aria-hidden="true">→</span></button><div class="awards-secondary"><button class="button button-muted" type="button" data-action="awards_back" ${show.step === 0 ? 'disabled' : ''}>Back</button><button class="button button-muted" type="button" data-action="awards_end">End awards show</button></div><ol class="award-order">${runningOrder}</ol></div>`;
+    const current = show.number ? state.awards[show.number - 1] : null;
+    const script = current
+      ? `${current.intro} ${show.revealed ? `The winner: ${current.winners.join(' and ')}, with ${current.stat}.` : 'And the winner is…'}`
+      : `We’ve been keeping score all game: every answer from the chair, from the sofa, and from our experts. Tonight we have ${show.total} award${show.total === 1 ? '' : 's'} to give out, saving the biggest for last.`;
+    const scriptCard = `<div class="award-script"><p>READ OUT</p><blockquote>${escapeHtml(script)}</blockquote></div>`;
+    return `<div class="control-block awards-block"><h2>${show.number ? `Award ${show.number} of ${show.total}` : 'Awards intro on TV'}</h2>${show.award ? `<p class="control-note">${escapeHtml(show.award.title)} · ${show.revealed ? 'winner revealed' : 'winner hidden'}</p>` : ''}${scriptCard}<button class="button button-lime awards-control" type="button" data-action="awards_next" ${show.finished ? 'disabled' : ''}>${nextLabel} <span aria-hidden="true">→</span></button><div class="awards-secondary"><button class="button button-muted" type="button" data-action="awards_back" ${show.step === 0 ? 'disabled' : ''}>Back</button><button class="button button-muted" type="button" data-action="awards_end">End awards show</button></div><ol class="award-order">${runningOrder}</ol></div>`;
   }
 
   function renderAwardsStage(show) {

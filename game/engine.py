@@ -15,6 +15,26 @@ FINAL_TIERS = {
     "second_best": {"label": "Second-best expert", "rank": 1, "questions": 2},
     "worst": {"label": "Worst expert", "rank": -1, "questions": 1},
 }
+# Read aloud by the host before revealing each winner.
+AWARD_INTROS = {
+    "Questionable Credentials": "Every expert has a specialist subject. This award goes to the expert who struggled most "
+    "in their own category. Awkward.",
+    "Secret Polymath": "This one is for the expert with a hidden talent: the best score on questions outside "
+    "their own specialist subject.",
+    "Couch Genius": "Some people are brilliant from the sofa and freeze in the chair. This goes to the player with "
+    "the biggest gap between their sofa score and their chair score.",
+    "Hot Seat Hero": "The chair is where the pressure is. This goes to the player with the best record when it "
+    "really counted.",
+    "On Fire": "Players and experts both compete for this one: the longest run of correct answers in a row.",
+    "Self-Proclaimed Expert": "They called themselves an expert. The numbers disagree. This goes to the expert "
+    "with the lowest score of the night.",
+    "Wooden Spoon": "Somebody has to come last. Counting every answer from the chair and the sofa, this goes to "
+    "the player with the lowest score.",
+    "The Expert's Expert": "Across every question tonight, this goes to the expert who got the most right. "
+    "A true expert.",
+    "Brain of the Party": "Our final award. Counting every answer, from the chair and from the sofa, this goes "
+    "to the best player of the night.",
+}
 
 
 class GameError(ValueError):
@@ -525,7 +545,7 @@ class GameEngine:
     def awards(self) -> list[dict[str, object]]:
         results: list[dict[str, object]] = []
 
-        def give(title: str, description: str, entries: list[tuple[str, tuple, str]]) -> None:
+        def give(title: str, description: str, entries: list[tuple[str, tuple, str]], intro: str = "") -> None:
             # Highest rank wins; equal ranks share the award.
             if not entries:
                 return
@@ -535,6 +555,7 @@ class GameEngine:
                 {
                     "title": title,
                     "description": description,
+                    "intro": intro or AWARD_INTROS.get(title, ""),
                     "winners": [name for name, _, _ in winners],
                     "stat": winners[0][2],
                 }
@@ -554,13 +575,25 @@ class GameEngine:
                 answered, correct = c.by_category.get(category, [0, 0])
                 if answered:
                     expert_entries.append((e.name, (correct / answered, correct), stat(correct, answered)))
-            give(f"{category} Guru", f"Best expert at {category}", expert_entries)
+            give(
+                f"{category} Guru",
+                f"Best expert at {category}",
+                expert_entries,
+                f"Our experts answered every question, whatever the category. This one goes to the expert "
+                f"who did best on the {category} questions.",
+            )
             player_entries = []
             for p in scored_players:
                 answered, correct = p.score.by_category.get(category, [0, 0])
                 if answered:
                     player_entries.append((p.name, (correct / answered, correct), stat(correct, answered)))
-            give(f"{category} Champion", f"Best player at {category}", player_entries)
+            give(
+                f"{category} Champion",
+                f"Best player at {category}",
+                player_entries,
+                f"Counting answers from the chair and from the sofa, this goes to the player "
+                f"who did best on the {category} questions.",
+            )
 
         own_category = []
         other_categories = []
@@ -679,7 +712,17 @@ class GameEngine:
             raise GameError(f"No questions are configured for {category}.")
         question = self._rng.choice(pool)
         pool.remove(question)
-        return question
+        option_order = list(range(4))
+        self._rng.shuffle(option_order)
+        options = tuple(question.options[index] for index in option_order)
+        correct_index = option_order.index("ABCD".index(question.correct))
+        return Question(
+            question.id,
+            question.category,
+            question.text,
+            options,
+            "ABCD"[correct_index],
+        )
 
     def _record_expert_results(self, question: Question) -> None:
         for expert_id, answer in self.expert_answers.items():

@@ -31,6 +31,25 @@ class GameEngineTests(unittest.TestCase):
         self.assertEqual(self.game.phase, GamePhase.LANDED)
         self.game.confirm_landing()
 
+    def correct_answer(self) -> str:
+        question = self.game.current_question
+        assert question is not None
+        return question.correct
+
+    def wrong_answer(self) -> str:
+        return next(letter for letter in "ABCD" if letter != self.correct_answer())
+
+    def test_drawn_question_shuffles_options_and_tracks_correct_answer(self) -> None:
+        self.start_question()
+
+        question = self.game.current_question
+
+        self.assertIsNotNone(question)
+        assert question is not None
+        self.assertCountEqual(question.options, ("A", "B", "C", "D"))
+        self.assertEqual(question.options["ABCD".index(question.correct)], "B")
+        self.assertNotEqual(question.options, ("A", "B", "C", "D"))
+
     def test_category_specialist_cannot_be_shut_down(self) -> None:
         self.game.choose_category("Football")
 
@@ -43,16 +62,18 @@ class GameEngineTests(unittest.TestCase):
 
     def test_correct_answer_clears_category_and_advances(self) -> None:
         self.start_question()
-        self.game.submit_expert_answer("football", "B")
-        self.game.submit_expert_answer("music", "A")
+        correct = self.correct_answer()
+        wrong = self.wrong_answer()
+        self.game.submit_expert_answer("football", correct)
+        self.game.submit_expert_answer("music", wrong)
 
-        result = self.game.reveal_answer("B")
+        result = self.game.reveal_answer(correct)
 
         self.assertEqual(result["type"], "correct")
         self.assertEqual(self.game.phase, GamePhase.ANSWER_REVEAL)
         self.assertEqual(self.game.cleared_categories, {"Football"})
         self.assertEqual(self.game.locked_expert_ids, {"music"})
-        self.assertEqual(self.game.snapshot()["current_question"]["correct"], "B")
+        self.assertEqual(self.game.snapshot()["current_question"]["correct"], correct)
 
         self.game.advance()
         self.assertEqual(self.game.phase, GamePhase.CATEGORY_SELECT)
@@ -63,7 +84,7 @@ class GameEngineTests(unittest.TestCase):
     def test_incorrect_answer_hands_off_to_next_player(self) -> None:
         self.start_question()
 
-        self.game.reveal_answer("A")
+        self.game.reveal_answer(self.wrong_answer())
         self.assertEqual(self.game.current_player_id, "player-1")
         self.game.advance()
 
@@ -73,9 +94,10 @@ class GameEngineTests(unittest.TestCase):
 
     def test_incorrect_answer_resets_categories_and_lockouts_next_spin(self) -> None:
         self.start_question()
-        self.game.submit_expert_answer("music", "A")
+        wrong = self.wrong_answer()
+        self.game.submit_expert_answer("music", wrong)
 
-        result = self.game.reveal_answer("A")
+        result = self.game.reveal_answer(wrong)
 
         self.assertEqual(result["type"], "incorrect")
         self.assertEqual(self.game.phase, GamePhase.ANSWER_REVEAL)
@@ -84,8 +106,8 @@ class GameEngineTests(unittest.TestCase):
 
     def test_locked_landing_ends_turn_without_question(self) -> None:
         self.start_question()
-        self.game.submit_expert_answer("music", "A")
-        self.game.reveal_answer("B")
+        self.game.submit_expert_answer("music", self.wrong_answer())
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
         self.game.choose_category("Music")
         self.game.choose_shutdown("football")
@@ -97,7 +119,7 @@ class GameEngineTests(unittest.TestCase):
 
     def test_expert_answers_are_private_until_reveal(self) -> None:
         self.start_question()
-        self.game.submit_expert_answer("football", "B")
+        self.game.submit_expert_answer("football", self.correct_answer())
 
         snapshot = self.game.snapshot()
 
@@ -107,22 +129,28 @@ class GameEngineTests(unittest.TestCase):
 
     def test_answer_cannot_be_changed_after_submission(self) -> None:
         self.start_question()
-        self.game.submit_expert_answer("football", "B")
+        self.game.submit_expert_answer("football", self.correct_answer())
 
         with self.assertRaises(GameError):
-            self.game.submit_expert_answer("football", "C")
+            self.game.submit_expert_answer("football", self.wrong_answer())
 
     def test_question_pool_repeats_only_after_exhaustion(self) -> None:
         first_question = self.game._draw_question("Football")
 
         self.assertEqual(self.game.questions_by_category["Football"], [])
-        self.assertEqual(self.game._draw_question("Football"), first_question)
+        repeated_question = self.game._draw_question("Football")
+        self.assertEqual(repeated_question.id, first_question.id)
+        self.assertEqual(
+            repeated_question.options["ABCD".index(repeated_question.correct)],
+            first_question.options["ABCD".index(first_question.correct)],
+        )
 
     def test_expert_performance_is_recorded(self) -> None:
         self.start_question()
-        self.game.submit_expert_answer("football", "B")
-        self.game.submit_expert_answer("music", "A")
-        self.game.reveal_answer("B")
+        correct = self.correct_answer()
+        self.game.submit_expert_answer("football", correct)
+        self.game.submit_expert_answer("music", self.wrong_answer())
+        self.game.reveal_answer(correct)
 
         stats_by_id = {expert["id"]: expert for expert in self.game.snapshot()["experts"]}
 
@@ -135,13 +163,13 @@ class GameEngineTests(unittest.TestCase):
 
     def test_worst_expert_tier_wins_with_one_correct_answer(self) -> None:
         self.start_question()
-        self.game.reveal_answer("B")
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
         self.game.choose_category("Music")
         self.game.choose_shutdown("football")
         self.game.resolve_landing("music")
         self.game.confirm_landing()
-        self.game.reveal_answer("C")
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
 
         self.assertEqual(self.game.phase, GamePhase.FINAL_EXPERT_SELECT)
@@ -158,13 +186,13 @@ class GameEngineTests(unittest.TestCase):
 
     def test_second_best_expert_tier_requires_two_correct_answers(self) -> None:
         self.start_question()
-        self.game.reveal_answer("B")
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
         self.game.choose_category("Music")
         self.game.choose_shutdown("football")
         self.game.resolve_landing("music")
         self.game.confirm_landing()
-        self.game.reveal_answer("C")
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
         self.game.choose_final_expert("second_best")
 
@@ -182,13 +210,13 @@ class GameEngineTests(unittest.TestCase):
 
     def test_best_expert_requires_three_correct_answers(self) -> None:
         self.start_question()
-        self.game.reveal_answer("B")
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
         self.game.choose_category("Music")
         self.game.choose_shutdown("football")
         self.game.resolve_landing("music")
         self.game.confirm_landing()
-        self.game.reveal_answer("C")
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
         self.game.choose_final_expert("best")
 
@@ -243,7 +271,7 @@ class GameEngineTests(unittest.TestCase):
         self.game.resolve_landing("football")
         self.game.use_respin()
         self.game.resolve_landing("football")
-        self.game.reveal_answer("B")
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
 
         self.game.choose_category("Music")
@@ -289,11 +317,12 @@ class GameEngineTests(unittest.TestCase):
 
     def test_fifty_fifty_removes_two_wrong_answers_once_per_player(self) -> None:
         self.start_question()
+        correct = self.correct_answer()
 
         removed = self.game.use_fifty_fifty()
 
         self.assertEqual(len(removed), 2)
-        self.assertNotIn("B", removed)
+        self.assertNotIn(correct, removed)
         self.assertEqual(self.game.snapshot()["fifty_fifty_removed"], removed)
         with self.assertRaises(GameError):
             self.game.use_fifty_fifty()
@@ -301,7 +330,7 @@ class GameEngineTests(unittest.TestCase):
     def test_powerups_are_never_restored_after_run_reset(self) -> None:
         self.start_question()
         self.game.use_fifty_fifty()
-        self.game.reveal_answer("A")
+        self.game.reveal_answer(self.wrong_answer())
         self.game.advance()
         self.game.select_player("player-1")
         self.game.choose_category("Football")
@@ -317,7 +346,7 @@ class GameEngineTests(unittest.TestCase):
     def test_powerups_are_per_player(self) -> None:
         self.start_question()
         self.game.use_fifty_fifty()
-        self.game.reveal_answer("A")
+        self.game.reveal_answer(self.wrong_answer())
         self.game.advance()
         self.game.select_player("player-2")
         self.game.choose_category("Football")
@@ -377,11 +406,11 @@ class GameEngineTests(unittest.TestCase):
     def test_off_chair_guesses_and_chair_answers_are_scored(self) -> None:
         self.start_question()
         self.assertEqual(self.game.snapshot()["player_guess_total"], 1)
-        self.game.submit_guess("player-2", "B")
+        self.game.submit_guess("player-2", self.correct_answer())
         self.assertTrue(next(p for p in self.game.snapshot()["players"] if p["id"] == "player-2")["guessed"])
-        self.game.reveal_answer("A")
+        self.game.reveal_answer(self.wrong_answer())
         with self.assertRaises(GameError):
-            self.game.submit_guess("player-2", "B")
+            self.game.submit_guess("player-2", self.correct_answer())
 
         chair, sofa = self.game.players["player-1"], self.game.players["player-2"]
         self.assertEqual((chair.questions_answered, chair.correct_answers, chair.chair_answered), (1, 0, 1))
@@ -395,16 +424,18 @@ class GameEngineTests(unittest.TestCase):
         self.game.resolve_landing("music")
         self.game.confirm_landing()
         self.assertEqual(self.game.player_guesses, {})
-        self.game.reveal_answer("C")
+        self.game.reveal_answer(self.correct_answer())
         self.assertEqual((sofa.questions_answered, sofa.correct_answers, sofa.chair_correct), (2, 2, 1))
         self.assertEqual(sofa.score.best_streak, 2)
 
     def test_awards_name_best_worst_and_category_winners(self) -> None:
         self.start_question()
-        self.game.submit_guess("player-2", "B")
-        self.game.submit_expert_answer("football", "B")
-        self.game.submit_expert_answer("music", "A")
-        self.game.reveal_answer("A")
+        correct = self.correct_answer()
+        wrong = self.wrong_answer()
+        self.game.submit_guess("player-2", correct)
+        self.game.submit_expert_answer("football", correct)
+        self.game.submit_expert_answer("music", wrong)
+        self.game.reveal_answer(wrong)
 
         awards = {award["title"]: award for award in self.game.awards()}
 
@@ -419,6 +450,7 @@ class GameEngineTests(unittest.TestCase):
         self.assertNotIn("Music Champion", awards)
         titles = [award["title"] for award in self.game.awards()]
         self.assertEqual(titles[-1], "Brain of the Party")
+        self.assertTrue(all(award["intro"] for award in self.game.awards()))
         self.assertLess(titles.index("Football Guru"), titles.index("Wooden Spoon"))
 
         self.game.reset()
@@ -426,8 +458,8 @@ class GameEngineTests(unittest.TestCase):
 
     def test_awards_show_reveals_one_award_at_a_time(self) -> None:
         self.start_question()
-        self.game.submit_guess("player-2", "B")
-        self.game.reveal_answer("A")
+        self.game.submit_guess("player-2", self.correct_answer())
+        self.game.reveal_answer(self.wrong_answer())
         total = len(self.game.awards())
 
         with self.assertRaises(GameError):
@@ -469,13 +501,13 @@ class GameEngineTests(unittest.TestCase):
 
     def test_no_powerups_on_final_question(self) -> None:
         self.start_question()
-        self.game.reveal_answer("B")
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
         self.game.choose_category("Music")
         self.game.choose_shutdown("football")
         self.game.resolve_landing("music")
         self.game.confirm_landing()
-        self.game.reveal_answer("C")
+        self.game.reveal_answer(self.correct_answer())
         self.game.advance()
 
         self.assertEqual(self.game.phase, GamePhase.FINAL_EXPERT_SELECT)
