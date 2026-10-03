@@ -1,8 +1,131 @@
-category,question,a,b,c,d,correct
-Football,Which country won the 2022 FIFA World Cup?,France,Argentina,Brazil,Germany,B
-Football,How many players from one team are on the pitch at kick-off?,9,10,11,12,C
-Music,Which band released the song Wonderwall?,Blur,Pulp,Oasis,Suede,C
-Music,Which instrument has 88 keys on a standard modern version?,Violin,Piano,Flute,Trumpet,B
-Films,Who directed the 1993 film Jurassic Park?,James Cameron,Steven Spielberg,Tim Burton,George Lucas,B
-Films,Which film features the character Dorothy Gale?,Matilda,The Wizard of Oz,Annie,The Sound of Music,B
-Birthday,What is her favourite film?,Titanic,Shrek,Mamma Mia!,Clueless,C
+category,question,a,b,c,d,answer
+Music,Which artist released the 2006 album 'Back to Black'?,Duffy,Adele,Lily Allen,Amy Winehouse,D
+Music,Which band was originally called 'The Rain' before adopting its better-known name?,Suede,Pulp,Oasis,Blur,C
+Music,Which artist's real name is Aubrey Graham?,The Weeknd,Kid Cudi,Post Malone,Drake,D
+Music,Which 1997 song by The Verve famously uses a sample/interpolation derived from a Rolling Stones recording?,Lucky Man,The Drugs Don't Work,Bitter Sweet Symphony,Sonnet,C
+Music,Which singer was born Stefani Germanotta?,Katy Perry,P!nk,Kesha,Lady Gaga,D
+Music,Which band released 'Take Me Out' in 2004?,The Libertines,Kasabian,The Strokes,Franz Ferdinand,D
+Music,"Which album contains 'Mr. Brightside', 'Somebody Told Me' and 'All These Things That I've Done'?",Day & Age,Sam's Town,Hot Fuss,Battle Born,C
+Music,Which artist's debut album was titled 'Frank'?,Lily Allen,Paloma Faith,Amy Winehouse,Adele,C
+Music,Which group had a UK hit with 'Murder on the Dancefloor'?,Sophie Ellis-Bextor,Goldfrapp,Moloko,The Ting Tings,A
+Music,Which artist released the album 'Channel Orange'?,Childish Gambino,Miguel,Frank Ocean,"Tyler, the Creator",C
+Music,Which song features the lyric/title phrase 'Paper Planes' and prominently samples 'Straight to Hell' by The Clash?,Nelly Furtado – Maneater,Santigold – L.E.S. Artistes,Lily Allen – Smile,M.I.A. – Paper Planes,D
+Music,Which band released 'Seven Nation Army'?,Arctic Monkeys,Kings of Leon,The Black Keys,The White Stripes,D
+Music,Which singer's 2013 album 'Pure Heroine' contained 'Royals'?,Florence Welch,Lana Del Rey,Lorde,Halsey,C
+Music,Which artist released 'The College Dropout' in 2004?,Lupe Fiasco,Kid Cudi,Common,Kanye West,D
+Music,Which British singer had the 2007 hit 'Foundations'?,Kate Nash,Natasha Bedingfield,Eliza Doolittle,Pixie Lott,A
+Music,Which group released 'No Scrubs'?,En Vogue,TLC,SWV,Destiny's Child,B
+Music,Which singer's real name is Abel Tesfaye?,Bruno Mars,Frank Ocean,Miguel,The Weeknd,D
+Music,Which band released 'American Idiot' as the title track of its 2004 album?,Blink-182,Fall Out Boy,Green Day,Sum 41,C
+Music,Which artist's 2015 album 'Beauty Behind the Madness' included 'The Hills'?,Future,Travis Scott,Drake,The Weeknd,D
+Music,"Which singer performed 'Unwritten', a song that became a major 2000s anthem and later a TikTok-era meme?",Natasha Bedingfield,Jamelia,Nelly Furtado,Dido,A
+Music,Which band released 'Teenage Dirtbag'?,Wheatus,Bowling for Soup,The Offspring,Sum 41,A
+Music,Which artist released 'Paper Planes' rather than 'Paper Planes (Remix)' as a breakout single in the late 2000s?,M.I.A.,N.E.R.D.,Azealia Banks,Santigold,A
+Music,Which singer was famously nicknamed the 'Queen of Pop'?,Cher,Britney Spears,Celine Dion,Madonna,D
+Music,Which band released 'Mr Jones' in 1993?,Matchbox Twenty,The Wallflowers,Counting Crows,Third Eye Blind,C
+Music,Which artist released the 2013 album 'Random Access Memories'?,The Chemical Brothers,Daft Punk,Justice,Deadmau5,B
+Music,Which band released 'Chop Suey!'?,Deftones,Limp Bizkit,System of a Down,Korn,C
+Music,Which band released 'Bat Country'?,Slipknot,Trivium,Bullet for My Valentine,Avenged Sevenfold,D
+Music,Which band released 'Tears Don't Fall'?,Bring Me the Horizon,Lostprophets,Bullet for My Valentine,Avenged Sevenfold,C
+Music,Which band released 'Numb'?,Incubus,Evanescence,Linkin Park,Papa Roach,C
+Music,Which artist famously bit the head off a bat onstage?,Ozzy Osbourne,Alice Cooper,Gene Simmons,Marilyn Manson,A
+Punjabi Men,Which Indian cricketer is nicknamed the 'Six Million Dollar Man' and was born in Chandigarh?,Shubman Gill,Yuvraj Singh,Gautam Gambhir,Harbhajan Singh,B
+Punjabi Men,Which Punjabi comedian created and starred in 'The Flop Show'?,Jaspal Bhatti,B.N. Sharma,Kapil Sharma,Gurpreet Ghuggi,A
+Punjabi Men,Which actor played the character Happy in the 'Carry On Jatta' films?,Gurpreet Ghuggi,Binnu Dhillon,Jaswinder Bhalla,Gippy Grewal,A
+Punjabi Men,Which Punjabi film series stars Diljit Dosanjh and Neeru Bajwa as a central pairing?,Carry On Jatta,Nikka Zaildar,Jatt & Juliet,Chal Mera Putt,C
+Punjabi Men,Which former Indian cricketer became known for his outspoken commentary and the nickname 'Sixer Sidhu'?,Yograj Singh,Harbhajan Singh,Navjot Singh Sidhu,Bishan Singh Bedi,C
+Punjabi Men,Which Punjabi actor is particularly associated with the character Chacha Raji in comedy films?,B.N. Sharma,Upasana Singh,Karamjit Anmol,Jaswinder Bhalla,D
+Punjabi Men,Which actor starred as the title character in the Punjabi film 'Nikka Zaildar'?,Gippy Grewal,Ammy Virk,Diljit Dosanjh,Parmish Verma,B
+Punjabi Men,Which Punjabi comedian/actor played 'Shampy' in 'Angrej'?,Binnu Dhillon,Karamjit Anmol,Gurpreet Ghuggi,Jaswinder Bhalla,A
+Punjabi Men,Which Punjabi-origin comedian became the host of 'The Kapil Sharma Show'?,Sunil Grover,Kapil Sharma,Bharti Singh,Krushna Abhishek,B
+Punjabi Men,Which Indian fast bowler from Punjab was nicknamed 'Bhajji'?,RP Singh,Ishant Sharma,Munaf Patel,Harbhajan Singh,D
+Punjabi Men,Which Punjabi-origin actor played the lead in the Hindi film 'Singh Is Kinng'?,Bobby Deol,Jimmy Sheirgill,Akshay Kumar,Sonu Sood,C
+Punjabi Men,Which actor is particularly associated with the Punjabi film 'Munde UK De'?,Amrinder Gill,Gippy Grewal,Jimmy Sheirgill,Binnu Dhillon,C
+Punjabi Men,Which Punjabi actor played the character Jass in 'Jatt & Juliet'?,Jimmi Shergill,Ammy Virk,Gippy Grewal,Diljit Dosanjh,D
+Punjabi Men,Which comedian is known for the character 'Pinky' in Punjabi comedy cinema?,Karamjit Anmol,Gurpreet Ghuggi,Jaswinder Bhalla,Binnu Dhillon,B
+Punjabi Men,Which Punjabi actor was born in Muktsar and became widely known for roles in Punjabi cinema and Bollywood?,Jimmy Sheirgill,Sonu Sood,Ammy Virk,Gippy Grewal,B
+Punjabi Men,Which Punjabi-origin YouTuber/comedian is known for the character 'Harry' and became prominent in the 2010s?,Kenny Sebastian,Jus Reign,Zaid Ali,Superwoman,B
+Punjabi Men,Which Punjabi-origin creator is better known online as 'Superwoman'?,Sahil Shah,Jus Reign,Kanan Gill,Lilly Singh,D
+Punjabi Men,Which Punjabi-origin comedian was part of the YouTube-era group behind 'Brown Guys'?,Lilly Singh,Sahil Shah,Jus Reign,Kanan Gill,C
+Punjabi Men,Which singer/actor played the lead role in the Punjabi film 'Chal Mera Putt'?,Diljit Dosanjh,Amrinder Gill,Gippy Grewal,Ammy Virk,B
+Punjabi Men,Which Punjabi film is centred around a group of Punjabi immigrants living in the UK and released in 2019?,Jatt & Juliet,Angrej,Punjab 1984,Chal Mera Putt,D
+Punjabi Men,Which actor played the role of 'Shinda' in the Punjabi film 'Carry On Jatta'?,Jaswinder Bhalla,Binnu Dhillon,Gurpreet Ghuggi,Gippy Grewal,D
+Punjabi Men,Which Punjabi actor is strongly associated with the character 'Bhaaji' in comedy films and television?,Karamjit Anmol,Jaswinder Bhalla,Gurpreet Ghuggi,B.N. Sharma,D
+Punjabi Men,"Which former Indian cricketer's father, Yograj Singh, was also a first-class cricketer?",Yuvraj Singh,Navjot Singh Sidhu,Harbhajan Singh,Shubman Gill,A
+Punjabi Men,Which young Indian batter from Punjab made his international debut in 2019 and later became a major Test opener?,Shubman Gill,Ruturaj Gaikwad,Ishan Kishan,Prithvi Shaw,A
+Punjabi Men,"Which legendary hockey player from Punjab won three Olympic gold medals in the 1948, 1952 and 1956 Games?",Udham Singh,Balbir Singh Sr.,Milkha Singh,Dhyan Chand,B
+Punjabi Men,Which Punjabi athlete is famously known as the 'Flying Sikh'?,Milkha Singh,Surjit Singh,Balbir Singh Sr.,Gurbachan Randhawa,A
+Punjabi Men,Which Punjabi actor directed and starred in the comedy film 'Jatt James Bond'?,Rohit Jugraj,Gippy Grewal,Diljit Dosanjh,Ammy Virk,A
+Punjabi Men,Which Punjabi actor played the title role in 'Ardaas' and later became prominent in Bollywood as well?,Amrinder Gill,Diljit Dosanjh,Jimmy Sheirgill,Gippy Grewal,D
+Punjabi Men,Which actor played 'Jaggi' in the Punjabi film 'Angrej'?,Sargun Mehta,Binnu Dhillon,Ammy Virk,Amrinder Gill,D
+Punjabi Men,Which Punjabi comedian is known for the catchphrase/character 'Chachaji' and appeared extensively in Punjabi comedy films?,Karamjit Anmol,Jaswinder Bhalla,Binnu Dhillon,Gurpreet Ghuggi,B
+Pop Culture,"In 'The Office' (US), what is the name of the company that acquires Dunder Mifflin?",Vance Refrigeration,Prince Family Paper,Athlead,Sabre,D
+Pop Culture,"In 'Friends', what is Chandler Bing's middle name?",Matthew,Mitchell,Muriel,Michael,C
+Pop Culture,"In 'The Matrix', what is Neo's real name?",John Anderson,John Wick,Thomas Anderson,Thomas Edwards,C
+Pop Culture,"In 'Mean Girls', what colour is Regina George's Burn Book?",Pink,Red,Black,Purple,A
+Pop Culture,Which actor played Patrick Bateman in 'American Psycho'?,Jude Law,Christian Bale,Matt Damon,Edward Norton,B
+Pop Culture,"In 'The Simpsons', what is the name of the bar owned by Moe Szyslak?",The Drunken Clam,Moe's Place,Moe's Tavern,Springfield Arms,C
+Pop Culture,Which 2000s TV series begins with a plane crash on a mysterious island?,Heroes,Prison Break,Lost,Jericho,C
+Pop Culture,"In 'Harry Potter', what is the name of the pub that serves as an entrance to Diagon Alley?",The White Hart,The Three Broomsticks,The Hog's Head,The Leaky Cauldron,D
+Pop Culture,Which film features the fictional television show 'The Truman Show' within its story?,The Truman Show,Network,EdTV,Pleasantville,A
+Pop Culture,Which actress played Effy Stonem in the later seasons of 'Skins'?,Sophie Turner,Kaya Scodelario,Jodie Comer,Felicity Jones,B
+Pop Culture,Which actor played Mark Zuckerberg in 'The Social Network'?,Michael Cera,Andrew Garfield,Joseph Gordon-Levitt,Jesse Eisenberg,D
+Pop Culture,"In 'Scott Pilgrim vs. the World', what is the name of Ramona Flowers' first evil ex?",Lucas Lee,Gideon Graves,Matthew Patel,Todd Ingram,C
+Pop Culture,Which band released 'Wonderwall'?,Pulp,Suede,Oasis,Blur,C
+Pop Culture,Which 1990s series was set largely in the fictional town of Sunnydale?,Charmed,Buffy the Vampire Slayer,Felicity,Dawson's Creek,B
+Pop Culture,Who played the original Jack Sparrow in the 'Pirates of the Caribbean' films?,Colin Farrell,Johnny Depp,Orlando Bloom,Heath Ledger,B
+Pop Culture,Which actor played Don Draper in 'Mad Men'?,Michael Fassbender,Matthew McConaughey,Bryan Cranston,Jon Hamm,D
+Pop Culture,"In 'The Sopranos', what is Dr. Melfi's profession?",Psychologist,Neurologist,Surgeon,Psychiatrist,D
+Pop Culture,Which sitcom features the fictional Bluth family?,30 Rock,Community,Modern Family,Arrested Development,D
+Pop Culture,"In 'The Devil Wears Prada', what is the name of the fashion magazine run by Miranda Priestly?",Runway,Vogue,Mode,Clackers,A
+Pop Culture,Which actress played Mia Wallace in 'Pulp Fiction'?,Juliette Lewis,Uma Thurman,Geena Davis,Winona Ryder,B
+Pop Culture,Which 1999 film stars Jim Carrey as a man whose entire life is secretly filmed?,Man on the Moon,The Truman Show,Eternal Sunshine of the Spotless Mind,Being John Malkovich,B
+Pop Culture,Which actor played Neo after initially being offered the role of Will Smith?,Keanu Reeves,Matt Damon,Brad Pitt,Nicolas Cage,A
+Pop Culture,"In 'High Fidelity', what type of business does Rob Gordon own?",Record store,Bar,Bookshop,Cinema,A
+Pop Culture,Which 2000s series featured the fictional advertising agency Sterling Cooper?,The Newsroom,Entourage,Mad Men,Suits,C
+Pop Culture,Which actress played Veronica Mars?,Leighton Meester,Rachel Bilson,Kristen Bell,Sarah Michelle Gellar,C
+Pop Culture,Which film's protagonist is named Tyler Durden?,Se7en,The Machinist,Fight Club,Memento,C
+Pop Culture,Which actor played Dr. Gregory House?,Hugh Grant,Hugh Laurie,John Cusack,Clive Owen,B
+Pop Culture,"In 'Twin Peaks', what is the name of the diner famous for cherry pie?",Double D Diner,The Red Room,RR Cafe,Double R Diner,D
+Pop Culture,Which actress played Cher Horowitz in 'Clueless'?,Jennifer Love Hewitt,Neve Campbell,Alicia Silverstone,Sarah Michelle Gellar,C
+Pop Culture,Which film features the line/title concept 'I see dead people'?,The Ring,The Sixth Sense,The Grudge,The Others,B
+Brainrot,The '6-7' meme originally blew up from clips associated with which rapper/song?,Yeat – Money So Big,Skrilla – Doot Doot,Ken Carson – Yale,Playboi Carti – Magnolia,B
+Brainrot,What does 'sahur' refer to in the phrase/name used in 'Tung Tung Tung Sahur'?,A traditional Indonesian dance,A midnight prayer,A type of Indonesian drum,The pre-dawn meal during Ramadan,D
+Brainrot,Which game popularised the idea of collecting and stealing absurd 'brainrot' characters from other players?,Brookhaven,Pet Simulator 99,Steal a Brainrot,Adopt Me!,C
+Brainrot,What is the key visual gimmick of Ballerina Cappuccina?,A ballerina with a cappuccino/cup-like head,A cappuccino riding a horse,A ballerina wearing a giant mask,A dancing toilet with a tutu,A
+Brainrot,What does 'NPC' originally stand for in gaming?,Non-Player Character,Network Player Character,Non-Playable Content,New Player Controller,A
+Brainrot,The 'What are those?!' meme came from a viral clip involving which celebrity?,Kevin Hart,Brandon Jordan Miller,Shia LaBeouf,Kanye West,B
+Brainrot,The Popular "Damn Daniel" meme is associated with which Shoe?,white Vans,black Converse,red Nike sneakers,blue Adidas,A
+Brainrot,Who popularised the modern internet version of the 'Doge' meme through the famous Shiba Inu image?,Cheems,Bojack,Balltze,Kabosu,D
+Brainrot,Which phrase became a meme after a 2011 video by Rebecca Black?,Baby Shark,It's Corn,Friday,Let Her Go,C
+Brainrot,What does 'mewing' primarily refer to in its internet meme usage?,Flexing your jaw while chewing,Holding your breath underwater,Blinking without moving your eyes,A tongue/jaw posture associated with facial aesthetics,D
+Brainrot,Which meme format is represented by the phrase 'loss' and a sequence of four increasingly minimal panels?,Rage Comics,Wojak,Loss,Pepe,C
+Brainrot,Which character is associated with the phrase 'We do a little trolling'?,Pepe,Trollface,Nyan Cat,Doge,B
+Brainrot,The 'Rickroll' uses which song?,Together Forever,Never Gonna Give You Up,Cry for Help,Whenever You Need Somebody,B
+Brainrot,Which YouTube meme involved a man dramatically dancing through a series of poses in a warehouse/industrial setting?,Evolution of Dance,Harlem Shake,Dancing Pallbearers,Gangnam Style,B
+Brainrot,The Ghanaian dancing pallbearers became an international meme largely through what editing convention?,Speeding the footage up to 10x,Putting them into Minecraft,Replacing their faces with emojis,Adding a dramatic/funny song over the funeral procession,D
+Brainrot,Which animal is the mascot of the 'Nyan Cat' meme?,Fox,Cat,Dog,Hamster,B
+Brainrot,Which character is strongly associated with the phrase 'Ugandan Knuckles' and asking 'Do you know da wae?',Shadow,Sonic,Knuckles,Tails,C
+Brainrot,The 'Deez Nuts' meme was popularised by which 2015 Vine-era personality?,Thomas Sanders,WelvenDaGreat,King Bach,David Dobrik,B
+Brainrot,What is the 'Grimace Shake' trend fundamentally built around?,A Roblox avatar,A Fortnite emote,A purple energy drink,A purple McDonald's milkshake,D
+Brainrot,Which phrase is most directly associated with Fanum?,Rizz king,Mewing streak,Fanum tax,Only in Ohio,C
+Brainrot,"In internet slang, 'rizz' is primarily short for what?",Rhythm,Resistance,Charisma,Risk,C
+Brainrot,Which streamer/creator is strongly associated with the phrase 'Fanum tax'?,Fanum,Adin Ross,IShowSpeed,Kai Cenat,A
+Brainrot,Which Italian-brainrot character has a name combining a shark and an aviation-related object?,Bombardiro Crocodilo,Tralalero Tralala,Lirili Larila,Brr Brr Patapim,B
+Brainrot,Which character is a crocodile-like creature associated with the name 'Bombardiro Crocodilo'?,Trippi Troppi,Tung Tung Tung Sahur,Chimpanzini Bananini,Bombardiro Crocodilo,D
+Brainrot,What is distinctive about the names of many 'Italian brainrot' characters?,They all come from an Italian TV show,They are translated Latin phrases,They are all real Italian surnames,They use pseudo-Italian names paired with surreal AI-generated creatures,D
+Brainrot,Which meme phrase became associated with the hand gesture of repeatedly moving both hands in a '6-7' style?,Aura,Mewing,6-7,Ohio,C
+Brainrot,What does 'aura' usually mean in current Gen Z internet slang?,Their IQ,A person's perceived coolness/presence,Their number of followers,Their physical strength,B
+Brainrot,What is the joke behind 'negative aura points'?,Losing followers reduces your account rank,Getting banned reduces your Roblox level,Doing something embarrassing supposedly reduces your coolness score,Failing a game removes your XP,C
+Brainrot,Which older meme character is depicted as a green frog and became heavily associated with 4chan/internet culture?,Groyper,Frogger,Kermit,Pepe the Frog,D
+Brainrot,Which phrase is famously associated with the 'Dancing Pallbearers' meme?,Better Off Alone,Sandstorm,Astronomia,Turn Down for What,C
+Monica,What is Monica's favourite food?,ANSWER,Pizza,Sushi,Burgers,A
+Monica,What is Monica's favourite colour?,Blue,Pink,ANSWER,Purple,C
+Monica,What is Monica's favourite film?,ANSWER,Titanic,Mean Girls,Shrek,A
+Monica,What is Monica's favourite artist or band?,Taylor Swift,ANSWER,Arctic Monkeys,The Weeknd,B
+Monica,What is Monica's go-to fast food order?,ANSWER,Chicken nuggets,A burger and fries,Pizza,A
+Monica,What is Monica's biggest pet peeve?,ANSWER,People being late,Loud chewing,People interrupting,A
+Monica,What is Monica's favourite season?,Winter,Spring,ANSWER,Summer,C
+Monica,Where would Monica most like to go on holiday?,ANSWER,New York,Japan,Italy,A
+Monica,What is Monica's favourite drink?,ANSWER,Coffee,Coke,Water,A
+Monica,What is Monica's most-used phrase?,ANSWER,Bro,Literally,Nah,A

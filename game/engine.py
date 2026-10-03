@@ -60,11 +60,13 @@ class GameEngine:
         for question in self._all_questions:
             self.questions_by_category[question.category].append(question)
 
+        self.final_category = "Monica"
+
         missing = [category for category in self.categories if not self.questions_by_category[category]]
         if missing:
             raise ValueError(f"No questions configured for categories: {', '.join(missing)}")
-        if not self.questions_by_category["Birthday"]:
-            raise ValueError("At least one Birthday question is required.")
+        if not self.questions_by_category[self.final_category]:
+            raise ValueError("At least one final-round question is required.")
 
         self._rng = rng or random.Random()
         self.players: dict[str, Player] = {}
@@ -234,7 +236,7 @@ class GameEngine:
     def submit_expert_answer(self, expert_id: str, answer: str) -> None:
         if self.phase is GamePhase.FINAL_QUESTION:
             if expert_id != self.final_expert_id:
-                raise GameError("Only the chosen expert can answer the Birthday questions.")
+                raise GameError(f"Only the chosen expert can answer the {self.final_category} questions.")
         else:
             self._require_phase(GamePhase.QUESTION)
         self._require_expert(expert_id)
@@ -275,14 +277,14 @@ class GameEngine:
         self._require_phase(GamePhase.ANSWER_REVEAL)
         if self._pending_final_question:
             if self.final_expert_id:
-                self.current_question = self._draw_question("Birthday")
+                self.current_question = self._draw_question(self.final_category)
                 self.expert_answers.clear()
                 self.player_guesses.clear()
                 self.player_answer = None
                 self._pending_final_question = False
                 self.phase = GamePhase.FINAL_QUESTION
             else:
-                self.current_category = "Birthday"
+                self.current_category = self.final_category
                 self.current_question = None
                 self.current_expert_id = None
                 self.expert_answers.clear()
@@ -330,10 +332,11 @@ class GameEngine:
         if tier not in FINAL_TIERS:
             raise GameError("Choose the best, second-best, or worst expert.")
         tier_config = FINAL_TIERS[tier]
-        question_count = len(self._all_questions_by_category("Birthday"))
+        question_count = len(self._all_questions_by_category(self.final_category))
         if question_count < tier_config["questions"]:
             raise GameError(
-                f"The {tier_config['label'].lower()} option needs {tier_config['questions']} unique Birthday questions; "
+                f"The {tier_config['label'].lower()} option needs {tier_config['questions']} unique "
+                f"{self.final_category} questions; "
                 f"only {question_count} are configured."
             )
         ranked_experts = sorted(self.experts.values(), key=lambda expert: -self._expert_accuracy(expert.id))
@@ -341,14 +344,14 @@ class GameEngine:
         expert_index = min(rank, len(ranked_experts) - 1) if rank >= 0 else len(ranked_experts) - 1
         selected_expert = ranked_experts[expert_index]
         if joined_expert_ids is not None and selected_expert.id not in joined_expert_ids:
-            raise GameError("The chosen expert must join before the Birthday challenge.")
+            raise GameError("The chosen expert must join before the final challenge.")
         self.final_tier = tier
         self.final_expert_id = selected_expert.id
         self.final_questions_required = tier_config["questions"]
         self.final_questions_answered = 0
         self.final_correct_answers = 0
-        self.questions_by_category["Birthday"] = self._all_questions_by_category("Birthday")
-        self.current_question = self._draw_question("Birthday")
+        self.questions_by_category[self.final_category] = self._all_questions_by_category(self.final_category)
+        self.current_question = self._draw_question(self.final_category)
         self.expert_answers.clear()
         self.player_guesses.clear()
         self.player_answer = None
@@ -389,7 +392,7 @@ class GameEngine:
         question = self.current_question
         current_player = self.players.get(self.current_player_id) if self.current_player_id else None
         ranked_experts = sorted(self.experts.values(), key=lambda expert: -self._expert_accuracy(expert.id))
-        birthday_question_count = len(self._all_questions_by_category("Birthday"))
+        final_question_count = len(self._all_questions_by_category(self.final_category))
         final_expert_options = []
         for tier, config in FINAL_TIERS.items():
             rank = config["rank"]
@@ -403,8 +406,8 @@ class GameEngine:
                     "expert_name": expert.name,
                     "accuracy": self._expert_accuracy(expert.id),
                     "questions_required": config["questions"],
-                    "question_count": birthday_question_count,
-                    "available": birthday_question_count >= config["questions"],
+                    "question_count": final_question_count,
+                    "available": final_question_count >= config["questions"],
                 }
             )
         return {
@@ -569,7 +572,7 @@ class GameEngine:
         scored_experts = [(expert, card) for expert, card in scored_experts if card.answered]
 
         # Ceremony order: least important first, overall best player last.
-        for category in [*self.categories, "Birthday"]:
+        for category in [*self.categories, self.final_category]:
             expert_entries = []
             for e, c in scored_experts:
                 answered, correct = c.by_category.get(category, [0, 0])

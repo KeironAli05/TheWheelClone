@@ -8,15 +8,15 @@ from game.models import Expert, GamePhase, Player, Question
 class GameEngineTests(unittest.TestCase):
     def setUp(self) -> None:
         experts = [
-            Expert("football", "Alex", "Football"),
-            Expert("music", "Sarah", "Music"),
+            Expert("football", "Kashish", "Pop Culture"),
+            Expert("music", "Jimz", "Music"),
         ]
         questions = [
-            Question("f1", "Football", "Football question?", ("A", "B", "C", "D"), "B"),
+            Question("f1", "Pop Culture", "Pop Culture question?", ("A", "B", "C", "D"), "B"),
             Question("m1", "Music", "Music question?", ("A", "B", "C", "D"), "C"),
-            Question("birthday1", "Birthday", "Birthday question one?", ("A", "B", "C", "D"), "A"),
-            Question("birthday2", "Birthday", "Birthday question two?", ("A", "B", "C", "D"), "B"),
-            Question("birthday3", "Birthday", "Birthday question three?", ("A", "B", "C", "D"), "C"),
+            Question("monica1", "Monica", "Monica question one?", ("A", "B", "C", "D"), "A"),
+            Question("monica2", "Monica", "Monica question two?", ("A", "B", "C", "D"), "B"),
+            Question("monica3", "Monica", "Monica question three?", ("A", "B", "C", "D"), "C"),
         ]
         self.game = GameEngine(experts, questions, random.Random(1))
         self.game.add_player(Player("player-1", "Jamie"))
@@ -24,7 +24,7 @@ class GameEngineTests(unittest.TestCase):
         self.game.start()
         self.game.select_player("player-1")
 
-    def start_question(self, category: str = "Football") -> None:
+    def start_question(self, category: str = "Pop Culture") -> None:
         self.game.choose_category(category)
         self.game.choose_shutdown("music")
         self.assertTrue(self.game.resolve_landing("football"))
@@ -51,7 +51,7 @@ class GameEngineTests(unittest.TestCase):
         self.assertNotEqual(question.options, ("A", "B", "C", "D"))
 
     def test_category_specialist_cannot_be_shut_down(self) -> None:
-        self.game.choose_category("Football")
+        self.game.choose_category("Pop Culture")
 
         with self.assertRaisesRegex(GameError, "selected category cannot be shut down"):
             self.game.choose_shutdown("football")
@@ -71,7 +71,7 @@ class GameEngineTests(unittest.TestCase):
 
         self.assertEqual(result["type"], "correct")
         self.assertEqual(self.game.phase, GamePhase.ANSWER_REVEAL)
-        self.assertEqual(self.game.cleared_categories, {"Football"})
+        self.assertEqual(self.game.cleared_categories, {"Pop Culture"})
         self.assertEqual(self.game.locked_expert_ids, {"music"})
         self.assertEqual(self.game.snapshot()["current_question"]["correct"], correct)
 
@@ -135,10 +135,10 @@ class GameEngineTests(unittest.TestCase):
             self.game.submit_expert_answer("football", self.wrong_answer())
 
     def test_question_pool_repeats_only_after_exhaustion(self) -> None:
-        first_question = self.game._draw_question("Football")
+        first_question = self.game._draw_question("Pop Culture")
 
-        self.assertEqual(self.game.questions_by_category["Football"], [])
-        repeated_question = self.game._draw_question("Football")
+        self.assertEqual(self.game.questions_by_category["Pop Culture"], [])
+        repeated_question = self.game._draw_question("Pop Culture")
         self.assertEqual(repeated_question.id, first_question.id)
         self.assertEqual(
             repeated_question.options["ABCD".index(repeated_question.correct)],
@@ -241,7 +241,7 @@ class GameEngineTests(unittest.TestCase):
         return {powerup["id"]: powerup for powerup in self.game.snapshot()["powerups"]}
 
     def test_respin_returns_to_spinning_with_same_shutdowns(self) -> None:
-        self.game.choose_category("Football")
+        self.game.choose_category("Pop Culture")
         self.game.choose_shutdown("music")
         self.game.resolve_landing("football")
         self.assertTrue(self.powerups()["respin"]["available"])
@@ -255,7 +255,7 @@ class GameEngineTests(unittest.TestCase):
         self.assertEqual(self.game.phase, GamePhase.CATEGORY_SELECT)
 
     def test_respin_lands_on_same_expert_again_and_skips_landed_step(self) -> None:
-        self.game.choose_category("Football")
+        self.game.choose_category("Pop Culture")
         self.game.choose_shutdown("music")
         self.game.resolve_landing("football")
         self.game.use_respin()
@@ -266,7 +266,7 @@ class GameEngineTests(unittest.TestCase):
         self.assertTrue(self.powerups()["respin"]["used"])
 
     def test_used_respin_does_not_skip_landing_on_later_category(self) -> None:
-        self.game.choose_category("Football")
+        self.game.choose_category("Pop Culture")
         self.game.choose_shutdown("music")
         self.game.resolve_landing("football")
         self.game.use_respin()
@@ -283,7 +283,7 @@ class GameEngineTests(unittest.TestCase):
         self.assertEqual(self.game.phase, GamePhase.QUESTION)
 
     def test_respin_not_offered_on_shutdown_landing(self) -> None:
-        self.game.choose_category("Football")
+        self.game.choose_category("Pop Culture")
         self.game.choose_shutdown("music")
         self.game.resolve_landing("music")
 
@@ -293,21 +293,21 @@ class GameEngineTests(unittest.TestCase):
 
     def test_auto_locked_experts_stay_locked_through_respin(self) -> None:
         experts = [
-            Expert("football", "Alex", "Football"),
-            Expert("music", "Sarah", "Music"),
-            Expert("films", "Tom", "Films"),
+            Expert("football", "Kashish", "Pop Culture"),
+            Expert("music", "Jimz", "Music"),
+            Expert("sonu", "Sonu", "Punjabi Men"),
         ]
         questions = [
             Question(f"{category}1", category, "Question?", ("A", "B", "C", "D"), "A")
-            for category in ("Football", "Music", "Films", "Birthday")
+            for category in ("Pop Culture", "Music", "Punjabi Men", "Monica")
         ]
         game = GameEngine(experts, questions, random.Random(1))
         game.add_player(Player("player-1", "Jamie"))
         game.start()
         game.select_player("player-1")
         game.locked_expert_ids = {"music"}
-        game.choose_category("Football")
-        game.choose_shutdown("films")
+        game.choose_category("Pop Culture")
+        game.choose_shutdown("sonu")
         game.resolve_landing("football")
         game.use_respin()
 
@@ -333,7 +333,7 @@ class GameEngineTests(unittest.TestCase):
         self.game.reveal_answer(self.wrong_answer())
         self.game.advance()
         self.game.select_player("player-1")
-        self.game.choose_category("Football")
+        self.game.choose_category("Pop Culture")
         self.game.choose_shutdown("music")
         self.game.resolve_landing("football")
         self.game.confirm_landing()
@@ -349,7 +349,7 @@ class GameEngineTests(unittest.TestCase):
         self.game.reveal_answer(self.wrong_answer())
         self.game.advance()
         self.game.select_player("player-2")
-        self.game.choose_category("Football")
+        self.game.choose_category("Pop Culture")
         self.game.choose_shutdown("music")
         self.game.resolve_landing("football")
         self.game.confirm_landing()
@@ -373,7 +373,7 @@ class GameEngineTests(unittest.TestCase):
         self.game.submit_expert_answer("football", "B")
 
         snapshot = self.game.snapshot()
-        self.assertEqual(snapshot["peek"], {"expert_id": "music", "expert_name": "Sarah", "answer": "D"})
+        self.assertEqual(snapshot["peek"], {"expert_id": "music", "expert_name": "Jimz", "answer": "D"})
         self.assertEqual(snapshot["expert_answers"], {})
 
     def test_ask_the_players_vote(self) -> None:
@@ -415,7 +415,7 @@ class GameEngineTests(unittest.TestCase):
         chair, sofa = self.game.players["player-1"], self.game.players["player-2"]
         self.assertEqual((chair.questions_answered, chair.correct_answers, chair.chair_answered), (1, 0, 1))
         self.assertEqual((sofa.questions_answered, sofa.correct_answers, sofa.chair_answered), (1, 1, 0))
-        self.assertEqual(sofa.score.by_category, {"Football": [1, 1]})
+        self.assertEqual(sofa.score.by_category, {"Pop Culture": [1, 1]})
 
         self.game.advance()
         self.game.select_player("player-2")
@@ -441,17 +441,17 @@ class GameEngineTests(unittest.TestCase):
 
         self.assertEqual(awards["Brain of the Party"]["winners"], ["Taylor"])
         self.assertEqual(awards["Wooden Spoon"]["winners"], ["Jamie"])
-        self.assertEqual(awards["The Expert's Expert"]["winners"], ["Alex"])
-        self.assertEqual(awards["Self-Proclaimed Expert"]["winners"], ["Sarah"])
-        self.assertEqual(awards["Football Champion"]["stat"], "100% (1/1)")
-        self.assertEqual(awards["Football Guru"]["winners"], ["Alex"])
+        self.assertEqual(awards["The Expert's Expert"]["winners"], ["Kashish"])
+        self.assertEqual(awards["Self-Proclaimed Expert"]["winners"], ["Jimz"])
+        self.assertEqual(awards["Pop Culture Champion"]["stat"], "100% (1/1)")
+        self.assertEqual(awards["Pop Culture Guru"]["winners"], ["Kashish"])
         self.assertNotIn("Secret Polymath", awards)
         self.assertNotIn("Hot Seat Hero", awards)
         self.assertNotIn("Music Champion", awards)
         titles = [award["title"] for award in self.game.awards()]
         self.assertEqual(titles[-1], "Brain of the Party")
         self.assertTrue(all(award["intro"] for award in self.game.awards()))
-        self.assertLess(titles.index("Football Guru"), titles.index("Wooden Spoon"))
+        self.assertLess(titles.index("Pop Culture Guru"), titles.index("Wooden Spoon"))
 
         self.game.reset()
         self.assertEqual(self.game.awards(), [])

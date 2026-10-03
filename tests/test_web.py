@@ -213,8 +213,8 @@ class WebAppTests(unittest.TestCase):
         for payload in (
             {"action": "start"},
             {"action": "select_player"},
-            {"action": "choose_category", "category": "Football"},
-            {"action": "choose_shutdown", "expert_id": "sarah"},
+            {"action": "choose_category", "category": "Pop Culture"},
+            {"action": "choose_shutdown", "expert_id": "jimz"},
             {"action": "resolve_landing", "expert_id": expert_id},
             {"action": "confirm_landing"},
         ):
