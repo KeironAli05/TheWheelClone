@@ -14,9 +14,9 @@ class GameEngineTests(unittest.TestCase):
         questions = [
             Question("f1", "Pop Culture", "Pop Culture question?", ("A", "B", "C", "D"), "B"),
             Question("m1", "Music", "Music question?", ("A", "B", "C", "D"), "C"),
-            Question("monica1", "Monica", "Monica question one?", ("A", "B", "C", "D"), "A"),
-            Question("monica2", "Monica", "Monica question two?", ("A", "B", "C", "D"), "B"),
-            Question("monica3", "Monica", "Monica question three?", ("A", "B", "C", "D"), "C"),
+            Question("birthday1", "Birthday", "Birthday question one?", ("A", "B", "C", "D"), "A"),
+            Question("birthday2", "Birthday", "Birthday question two?", ("A", "B", "C", "D"), "B"),
+            Question("birthday3", "Birthday", "Birthday question three?", ("A", "B", "C", "D"), "C"),
         ]
         self.game = GameEngine(experts, questions, random.Random(1))
         self.game.add_player(Player("player-1", "Jamie"))
@@ -80,6 +80,40 @@ class GameEngineTests(unittest.TestCase):
         self.assertEqual(self.game.current_player_id, "player-1")
         self.game.choose_category("Music")
         self.assertEqual(self.game.phase, GamePhase.SHUTDOWN_SELECT)
+
+    def test_all_experts_wrong_releases_lockouts_without_changing_player_result(self) -> None:
+        for player_correct in (True, False):
+            with self.subTest(player_correct=player_correct):
+                self.setUp()
+                self.start_question()
+                correct = self.correct_answer()
+                wrong = self.wrong_answer()
+                for expert_id in self.game.experts:
+                    self.game.submit_expert_answer(expert_id, wrong)
+
+                result = self.game.reveal_answer(correct if player_correct else wrong)
+
+                self.assertEqual(result["type"], "correct" if player_correct else "incorrect")
+                self.assertEqual(self.game.locked_expert_ids, set())
+                self.assertEqual(
+                    self.game.cleared_categories, {"Pop Culture"} if player_correct else set()
+                )
+                self.assertEqual(self.game.players["player-1"].score.correct, int(player_correct))
+                for score in self.game.expert_scores.values():
+                    self.assertEqual(score.answered, 1)
+                    self.assertEqual(score.correct, 0)
+
+                self.game.advance()
+                if not player_correct:
+                    self.assertEqual(self.game.phase, GamePhase.PLAYER_SELECT)
+                    self.game.select_player("player-2")
+                else:
+                    self.assertEqual(self.game.current_player_id, "player-1")
+                self.game.choose_category("Music")
+                self.game.choose_shutdown("football")
+                self.assertTrue(self.game.resolve_landing("music"))
+                self.game.confirm_landing()
+                self.assertEqual(self.game.phase, GamePhase.QUESTION)
 
     def test_incorrect_answer_hands_off_to_next_player(self) -> None:
         self.start_question()
@@ -299,7 +333,7 @@ class GameEngineTests(unittest.TestCase):
         ]
         questions = [
             Question(f"{category}1", category, "Question?", ("A", "B", "C", "D"), "A")
-            for category in ("Pop Culture", "Music", "Punjabi Men", "Monica")
+            for category in ("Pop Culture", "Music", "Punjabi Men", "Birthday")
         ]
         game = GameEngine(experts, questions, random.Random(1))
         game.add_player(Player("player-1", "Jamie"))

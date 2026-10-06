@@ -16,8 +16,8 @@ class DataLoaderTests(unittest.TestCase):
         self.questions_path.write_text(
             "category,question,a,b,c,d,answer\n"
             "Pop Culture,Question?,One,Two,Three,Four,A\n"
-            "Monica,Personal?,One,Two,Three,Four,C\n"
-            "Monica,Final?,One,Two,Three,Four,B\n",
+            "Birthday,Personal?,One,Two,Three,Four,C\n"
+            "Birthday,Final?,One,Two,Three,Four,B\n",
             encoding="utf-8",
         )
 
@@ -26,7 +26,7 @@ class DataLoaderTests(unittest.TestCase):
         questions = load_questions(self.questions_path, experts)
 
         self.assertEqual(experts[0].id, "kashish")
-        self.assertEqual([question.category for question in questions], ["Pop Culture", "Monica", "Monica"])
+        self.assertEqual([question.category for question in questions], ["Pop Culture", "Birthday", "Birthday"])
         self.assertEqual(questions[0].options, ("One", "Two", "Three", "Four"))
 
     def test_rejects_unknown_question_category(self) -> None:
@@ -50,7 +50,7 @@ class DataLoaderTests(unittest.TestCase):
             load_questions(self.questions_path, load_experts(self.experts_path))
 
     def test_rejects_reserved_special_expert_category(self) -> None:
-        self.experts_path.write_text("name,category\nKashish,Monica\n", encoding="utf-8")
+        self.experts_path.write_text("name,category\nKashish,Birthday\n", encoding="utf-8")
 
         with self.assertRaisesRegex(DataFileError, "reserved"):
             load_experts(self.experts_path)

@@ -407,7 +407,10 @@
     if (action) {
       if (action.dataset.action === 'reset' && !window.confirm('Reset the game and clear all progress?')) return;
       if (action.dataset.confirm && !window.confirm(action.dataset.confirm)) return;
-      command(action.dataset.action, action.dataset.powerup ? { powerup: action.dataset.powerup } : {});
+      const values = {};
+      if (action.dataset.powerup) values.powerup = action.dataset.powerup;
+      if (action.dataset.tier) values.tier = action.dataset.tier;
+      command(action.dataset.action, values);
     }
     const guess = event.target.closest('[data-guess]');
     if (guess && socket) {

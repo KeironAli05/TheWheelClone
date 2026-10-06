@@ -264,6 +264,18 @@ available.
 Once the relevant turn is over, the temporary shut-downs are cleared
 unless the game rules specifically state otherwise.
 
+### If All Experts Get the Question Wrong
+
+If every expert submits an answer and all of them are wrong, their
+automatic shut-downs are cleared before the next spin. Their wrong
+answers still count towards their scores.
+
+The player's final answer is independent of the assisting expert's answer.
+If the player is correct, the category is cleared normally. If the player
+is wrong, the run resets normally.
+
+The player still chooses one expert to shut down for the next spin.
+
 ------------------------------------------------------------------------
 
 # 12. Completing All Categories

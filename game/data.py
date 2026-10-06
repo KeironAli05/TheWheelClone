@@ -19,7 +19,7 @@ def load_experts(path: Path) -> list[Expert]:
         category = _cell(row, "category")
         if not name or not category:
             raise DataFileError(f"{path}:{row_number}: name and category are required.")
-        if category.casefold() == "monica":
+        if category.casefold() == "birthday":
             raise DataFileError(f"{path}:{row_number}: {category} is reserved for special questions.")
         if name.casefold() in seen_names:
             raise DataFileError(f"{path}:{row_number}: expert name '{name}' is duplicated.")
@@ -36,12 +36,12 @@ def load_experts(path: Path) -> list[Expert]:
 
 def load_questions(path: Path, experts: list[Expert]) -> list[Question]:
     rows = _read_csv(path, {"category", "question", "a", "b", "c", "d", "answer"})
-    allowed_categories = {expert.category for expert in experts} | {"Monica"}
+    allowed_categories = {expert.category for expert in experts} | {"Birthday"}
     questions: list[Question] = []
     for row_number, row in enumerate(rows, start=2):
         category = _cell(row, "category")
         text = _cell(row, "question")
-        options = tuple(_cell(row, key) for key in ("a", "b", "c", "d"))
+        options = (_cell(row, "a"), _cell(row, "b"), _cell(row, "c"), _cell(row, "d"))
         correct = _cell(row, "answer").upper()
         if category not in allowed_categories:
             raise DataFileError(f"{path}:{row_number}: unknown category '{category}'.")

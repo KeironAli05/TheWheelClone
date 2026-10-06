@@ -60,7 +60,7 @@ class GameEngine:
         for question in self._all_questions:
             self.questions_by_category[question.category].append(question)
 
-        self.final_category = "Monica"
+        self.final_category = "Birthday"
 
         missing = [category for category in self.categories if not self.questions_by_category[category]]
         if missing:
@@ -733,6 +733,8 @@ class GameEngine:
         self.locked_expert_ids = {
             expert_id for expert_id, answer in self.expert_answers.items() if answer != question.correct
         }
+        if self.locked_expert_ids == set(self.experts):
+            self.locked_expert_ids.clear()
 
     def _record_player_answers(self, question: Question, chair_player: Player, chair_correct: bool) -> None:
         chair_player.score.record(question.category, chair_correct)

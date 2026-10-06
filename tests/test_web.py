@@ -300,6 +300,125 @@ class WebAppTests(unittest.TestCase):
         for client in (host_socket, voter_socket, chair_socket):
             client.disconnect()
 
+    def test_complete_game_runs_through_socket_events(self) -> None:
+        game = self.app.extensions["wheel_game"]
+        host_client = self.app.test_client()
+        self.assertEqual(host_client.post("/join", data={"role": "host"}).status_code, 302)
+        player_clients = {}
+        for name in ("Jamie", "Taylor", "Casey"):
+            player_client = self.app.test_client()
+            self.assertEqual(player_client.post("/join", data={"role": "player", "name": name}).status_code, 302)
+            player_clients[name] = player_client
+        expert_clients = {}
+        for expert_id in game.experts:
+            expert_client = self.app.test_client()
+            self.assertEqual(expert_client.post("/join", data={"role": "expert", "expert_id": expert_id}).status_code, 302)
+            expert_clients[expert_id] = expert_client
+
+        display_socket = self.socketio.test_client(self.app)
+        display_socket.emit("display_join")
+        host_socket = self.socketio.test_client(self.app, flask_test_client=host_client)
+        player_sockets = {
+            name: self.socketio.test_client(self.app, flask_test_client=player_client)
+            for name, player_client in player_clients.items()
+        }
+        expert_sockets = {
+            expert_id: self.socketio.test_client(self.app, flask_test_client=expert_client)
+            for expert_id, expert_client in expert_clients.items()
+        }
+
+        def command(action: str, **values: str) -> None:
+            result = host_socket.emit("host_command", {"action": action, **values}, callback=True)
+            self.assertTrue(result["ok"], (action, result))
+
+        def answer_experts(answer: str) -> None:
+            for expert_socket in expert_sockets.values():
+                result = expert_socket.emit("submit_answer", {"answer": answer}, callback=True)
+                self.assertTrue(result["ok"], result)
+
+        def answer_players_off_chair(chair_id: str, answer: str) -> None:
+            for name, player_socket in player_sockets.items():
+                player_id = next(player_id for player_id, player in game.players.items() if player.name == name)
+                if player_id != chair_id:
+                    result = player_socket.emit("submit_guess", {"answer": answer}, callback=True)
+                    self.assertTrue(result["ok"], result)
+
+        command("start")
+        command("select_player")
+        chair_id = game.current_player_id
+        first_category = game.categories[0]
+        shutdown_id = next(expert_id for expert_id, expert in game.experts.items() if expert.category != first_category)
+        command("choose_category", category=first_category)
+        command("choose_shutdown", expert_id=shutdown_id)
+        command("resolve_landing", expert_id=shutdown_id)
+        self.assertEqual(game.phase.name, "CATEGORY_SELECT")
+
+        command("choose_category", category=first_category)
+        shutdown_id = next(expert_id for expert_id, expert in game.experts.items() if expert.category != first_category)
+        command("choose_shutdown", expert_id=shutdown_id)
+        landing_id = next(expert_id for expert_id in game.experts if expert_id != shutdown_id)
+        command("resolve_landing", expert_id=landing_id)
+        command("use_powerup", powerup="respin")
+        command("resolve_landing", expert_id=landing_id)
+        answer = game.current_question.correct
+        command("use_powerup", powerup="fifty_fifty")
+        self.assertEqual(len(game.fifty_fifty_removed), 2)
+        self.assertNotIn(answer, game.fifty_fifty_removed)
+        answer_experts(answer)
+        peek_id = next(iter(game.experts))
+        command("use_powerup", powerup="peek", expert_id=peek_id)
+        self.assertEqual(game.peek_expert_id, peek_id)
+        command("use_powerup", powerup="ask_players")
+        answer_players_off_chair(chair_id, answer)
+        command("close_vote")
+        self.assertEqual(game.audience_status, "closed")
+        command("reveal_answer", answer=answer)
+        command("advance")
+
+        for category in game.categories[1:]:
+            command("choose_category", category=category)
+            shutdown_id = next(expert_id for expert_id, expert in game.experts.items() if expert.category != category)
+            command("choose_shutdown", expert_id=shutdown_id)
+            landing_id = next(expert_id for expert_id in game.experts if expert_id != shutdown_id)
+            command("resolve_landing", expert_id=landing_id)
+            command("confirm_landing")
+            answer = game.current_question.correct
+            answer_experts(answer)
+            answer_players_off_chair(chair_id, answer)
+            command("reveal_answer", answer=answer)
+            command("advance")
+
+        self.assertEqual(game.phase.name, "FINAL_EXPERT_SELECT")
+        command("choose_final_expert", tier="best")
+        final_expert_socket = expert_sockets[game.final_expert_id]
+        for question_number in range(3):
+            answer = game.current_question.correct
+            result = final_expert_socket.emit("submit_answer", {"answer": answer}, callback=True)
+            self.assertTrue(result["ok"], result)
+            answer_players_off_chair(chair_id, answer)
+            command("reveal_final_answer", answer=answer)
+            if question_number < 2:
+                command("advance")
+        self.assertEqual(game.phase.name, "GAME_WON")
+
+        command("awards_start")
+        command("awards_next")
+        command("awards_next")
+        command("awards_back")
+        command("awards_next")
+        award_steps = 2 * len(game.awards())
+        while game.awards_step < award_steps:
+            command("awards_next")
+        self.assertTrue(game.snapshot()["awards_show"]["finished"])
+        command("awards_end")
+        command("reset")
+        self.assertEqual(game.phase.name, "LOBBY")
+        self.assertFalse(game.cleared_categories)
+        self.assertTrue(all(not player.used_powerups for player in game.players.values()))
+
+        for socket_client in (display_socket, host_socket, *player_sockets.values(), *expert_sockets.values()):
+            socket_client.disconnect()
+
 
 if __name__ == "__main__":
     unittest.main()
