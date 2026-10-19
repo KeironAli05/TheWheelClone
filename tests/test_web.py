@@ -419,6 +419,171 @@ class WebAppTests(unittest.TestCase):
         for socket_client in (display_socket, host_socket, *player_sockets.values(), *expert_sockets.values()):
             socket_client.disconnect()
 
+    def test_stress_full_question_pools_powers_and_final_tiers(self) -> None:
+        game = self.app.extensions["wheel_game"]
+        host_client = self.app.test_client()
+        self.assertEqual(host_client.post("/join", data={"role": "host"}).status_code, 302)
+        player_clients = {}
+        for name in ("Jamie", "Taylor", "Casey", "Morgan"):
+            player_client = self.app.test_client()
+            self.assertEqual(player_client.post("/join", data={"role": "player", "name": name}).status_code, 302)
+            player_clients[name] = player_client
+        expert_clients = {}
+        for expert_id in game.experts:
+            expert_client = self.app.test_client()
+            self.assertEqual(expert_client.post("/join", data={"role": "expert", "expert_id": expert_id}).status_code, 302)
+            expert_clients[expert_id] = expert_client
+
+        display_socket = self.socketio.test_client(self.app)
+        display_socket.emit("display_join")
+        host_socket = self.socketio.test_client(self.app, flask_test_client=host_client)
+        player_sockets = {
+            name: self.socketio.test_client(self.app, flask_test_client=client)
+            for name, client in player_clients.items()
+        }
+        expert_sockets = {
+            expert_id: self.socketio.test_client(self.app, flask_test_client=client)
+            for expert_id, client in expert_clients.items()
+        }
+        player_ids = {player.name: player.id for player in game.players.values()}
+
+        def command(action: str, **values: str) -> None:
+            result = host_socket.emit("host_command", {"action": action, **values}, callback=True)
+            self.assertTrue(result["ok"], (action, result))
+
+        def answer_experts(answer: str, expert_ids: set[str] | None = None) -> None:
+            for expert_id, expert_socket in expert_sockets.items():
+                if expert_ids is None or expert_id in expert_ids:
+                    result = expert_socket.emit("submit_answer", {"answer": answer}, callback=True)
+                    self.assertTrue(result["ok"], (expert_id, result))
+
+        def answer_players_off_chair(chair_id: str, answer: str) -> None:
+            for name, player_socket in player_sockets.items():
+                if player_ids[name] != chair_id:
+                    result = player_socket.emit("submit_guess", {"answer": answer}, callback=True)
+                    self.assertTrue(result["ok"], (name, result))
+
+        def drain_events() -> None:
+            for socket_client in (display_socket, host_socket, *player_sockets.values(), *expert_sockets.values()):
+                socket_client.get_received()
+
+        command("start")
+        question_ids = {category: set() for category in game.categories}
+        for question_number in range(120):
+            if question_number < len(player_ids):
+                game.select_player(list(player_ids.values())[question_number])
+            else:
+                command("select_player")
+            chair_id = game.current_player_id
+            category = game.categories[question_number % len(game.categories)]
+            specialist_id = next(expert_id for expert_id, expert in game.experts.items() if expert.category == category)
+            shutdown_id = next(expert_id for expert_id in game.experts if expert_id != specialist_id)
+            command("choose_category", category=category)
+            command("choose_shutdown", expert_id=shutdown_id)
+            command("resolve_landing", expert_id=specialist_id)
+
+            chair = game.players[chair_id]
+            if "respin" not in chair.used_powerups:
+                command("use_powerup", powerup="respin")
+                command("resolve_landing", expert_id=specialist_id)
+            else:
+                command("confirm_landing")
+            question = game.current_question
+            self.assertIsNotNone(question)
+            assert question is not None
+            self.assertEqual(question.category, category)
+            question_ids[category].add(question.id)
+
+            if "fifty_fifty" not in chair.used_powerups:
+                command("use_powerup", powerup="fifty_fifty")
+                self.assertEqual(len(game.fifty_fifty_removed), 2)
+                self.assertNotIn(question.correct, game.fifty_fifty_removed)
+            if "peek" not in chair.used_powerups:
+                command("use_powerup", powerup="peek", expert_id=specialist_id)
+                self.assertEqual(game.peek_expert_id, specialist_id)
+            if "ask_players" not in chair.used_powerups:
+                command("use_powerup", powerup="ask_players")
+                self.assertEqual(game.audience_status, "open")
+
+            answer_experts(question.correct)
+            answer_players_off_chair(chair_id, question.correct)
+            if game.audience_status == "open":
+                command("close_vote")
+                self.assertEqual(sum(game.audience_counts.values()), len(player_ids) - 1)
+            wrong_answer = next(
+                letter for letter in "ABCD"
+                if letter != question.correct and letter not in game.fifty_fifty_removed
+            )
+            command("reveal_answer", answer=wrong_answer)
+            self.assertEqual(game.phase.name, "ANSWER_REVEAL")
+            command("advance")
+            self.assertEqual(game.phase.name, "PLAYER_SELECT")
+            drain_events()
+
+        for category in game.categories:
+            self.assertEqual(len(question_ids[category]), 30, category)
+        expected_powerups = {"respin", "fifty_fifty", "peek", "ask_players"}
+        for player in game.players.values():
+            self.assertEqual(player.used_powerups, expected_powerups, player.name)
+
+        for tier, questions_required in (("best", 3), ("second_best", 2), ("worst", 1)):
+            command("reset")
+            command("start")
+            for category in game.categories:
+                if game.phase.name == "PLAYER_SELECT":
+                    command("select_player")
+                chair_id = game.current_player_id
+                specialist_id = next(
+                    expert_id for expert_id, expert in game.experts.items() if expert.category == category
+                )
+                shutdown_id = next(expert_id for expert_id in game.experts if expert_id != specialist_id)
+                command("choose_category", category=category)
+                command("choose_shutdown", expert_id=shutdown_id)
+                command("resolve_landing", expert_id=specialist_id)
+                command("confirm_landing")
+                question = game.current_question
+                self.assertIsNotNone(question)
+                assert question is not None
+                answer_experts(question.correct)
+                answer_players_off_chair(chair_id, question.correct)
+                command("reveal_answer", answer=question.correct)
+                command("advance")
+
+            self.assertEqual(game.phase.name, "FINAL_EXPERT_SELECT")
+            command("choose_final_expert", tier=tier)
+            self.assertEqual(game.final_questions_required, questions_required)
+            for question_number in range(questions_required):
+                question = game.current_question
+                self.assertIsNotNone(question)
+                assert question is not None
+                self.assertEqual(question.category, "Birthday")
+                final_expert_socket = expert_sockets[game.final_expert_id]
+                result = final_expert_socket.emit("submit_answer", {"answer": question.correct}, callback=True)
+                self.assertTrue(result["ok"], result)
+                answer_players_off_chair(game.current_player_id, question.correct)
+                command("reveal_final_answer", answer=question.correct)
+                if question_number < questions_required - 1:
+                    command("advance")
+            self.assertEqual(game.phase.name, "GAME_WON")
+
+        command("awards_start")
+        self.assertTrue(game.awards())
+        command("awards_next")
+        command("awards_next")
+        command("awards_back")
+        command("awards_next")
+        awards_steps = 2 * len(game.awards())
+        while game.awards_step < awards_steps:
+            command("awards_next")
+        self.assertTrue(game.snapshot()["awards_show"]["finished"])
+        command("awards_end")
+        command("reset")
+        self.assertEqual(game.phase.name, "LOBBY")
+        self.assertTrue(all(not player.used_powerups and player.questions_answered == 0 for player in game.players.values()))
+
+        for socket_client in (display_socket, host_socket, *player_sockets.values(), *expert_sockets.values()):
+            socket_client.disconnect()
+
 
 if __name__ == "__main__":
     unittest.main()
